@@ -1,0 +1,24 @@
+/* Shared look for the debug pages (node.html / ivo.html still carry their own copy). */
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --s1: #2a78d6; --good: #0ca30c; --warn: #fab219; --crit: #d03b3b; --flash: #fdf0c2;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10); --s1: #3987e5; --flash: #4a3d12;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 28px; background: var(--page); color: var(--ink);
+       font: 14px/1.45 ui-sans-serif, -apple-system, system-ui, sans-serif; }
+h1 { font-size: 18px; font-weight: 600; margin: 0; }
+h3 { font-size: 12px; font-weight: 600; color: var(--ink2); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 8px; }
+.sub { color: var(--ink2); font-weight: 400; font-size: 13px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.empty { color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 8px; padding: 10px 12px; }
+pre.raw { margin: 0; padding: 10px 12px; overflow: auto; max-height: 520px; background: var(--surface);
+          border: 1px solid var(--ring); border-radius: 8px; }

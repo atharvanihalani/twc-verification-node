@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overview · TWC verification node</title>
+<link rel="stylesheet" href="/static/base.css">
+<style>
+  /* Layout "D · App-native README" (Claude Design canvas, 2026-11-08). Always light, even in OS dark mode. */
+  :root { color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --ring: rgba(11,11,11,0.10); }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+            --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10); }
+  }
+  body { font-size: 15px; line-height: 1.6; }
+  a { color: #1f5fbf; } a:hover { color: #163f80; }
+  body > main.essay { max-width: 720px; margin: 24px auto 96px; display: flex; flex-direction: column; gap: 14px; }
+  .essay h1 { font-size: 26px; line-height: 1.25; }
+  .meta { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 6px 0 4px; }
+  .btn { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 6px;
+         font-size: 14px; text-decoration: none; }
+  .btn.primary { background: var(--ink); color: var(--page); font-weight: 600; }
+  .btn.primary:hover { color: var(--page); opacity: .88; }
+  .btn.ghost { border: 1px solid rgba(11,11,11,0.15); color: var(--ink); }
+  .btn.ghost[aria-disabled="true"] { color: var(--muted); pointer-events: none; }
+  .context { color: var(--ink2); font-style: italic; margin: 6px 0 0; }
+  .essay h2 { font-size: 17px; font-weight: 600; margin: 26px 0 0; }
+  .essay p { margin: 0; }
+  .essay ol, .essay ul { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+  .essay ul ul { margin-top: 4px; color: var(--ink2); }
+  figure { margin: 8px 0; background: #fff; border: 1px solid var(--ring); border-radius: 8px; padding: 12px; }
+  figure img { display: block; width: 100%; height: auto; }
+  /* the draft's own placeholders, kept visible on purpose */
+  .todo { background: #fff2c4; color: #6b5200; border-radius: 3px; padding: 0 3px; font-size: .92em; }
+  .essay p.label { font-weight: 600; }
+  sup.fn { font-size: .72em; line-height: 0; } sup.fn a { text-decoration: none; padding: 0 1px; }
+  .essay ol.notes { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--grid); font-size: 13.5px; color: var(--ink2); }
+  .essay ol.notes + .foot { margin-top: 8px; border-top: 0; padding-top: 0; }
+  .foot { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--grid); color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<script src="/static/nav.js"></script>
+<!-- Text: Atharva's draft, "[Internal] Prototype: Telemetry-based Compute Verification" (dated Nov 10, 2026; this is
+     the export he gave on Nov 11, "... (1).md"), placed verbatim (typos included); it will change. His placeholders are highlighted. Changes from the doc: links point
+     inside this site, the demo link goes to /replay (the doc says /ivo, which is parked), the empty "install a
+     collector" link goes to Debug > Connect a box, and one empty bullet at the end of Open Problems is dropped.
+     The two diagrams are the same drawings as the doc's, from the sharper Nov 7 PDF export.
+     The previous version (Nov 7 draft, with its two extra figures) is at ../../parked-pages/overview-v0/. -->
+<main class="essay">
+  <h1>Prototype: Telemetry-based Compute Verification</h1>
+  <div class="meta">draft · Atharva Nihalani · Nov 10, 2026 · Lucid internal</div>
+  <div class="actions">
+    <a class="btn primary" href="/replay">Open the demo →</a>
+    <!-- TODO(before prod): remove "Read as Google Doc". Lucid-internal only: the doc is not public. -->
+    <a class="btn ghost" id="gdoc" href="#" target="_blank" rel="noopener">Read as Google Doc</a>
+  </div>
+
+  <p class="context">Context: This is a public write-up for an <a href="/replay">accompanying demo</a></p>
+
+  <h2>What is Telemetry-based Verification?</h2>
+  <p>Telemetry-based Verification uses real time telemetry data from GPUs to verify whether their active workloads agree with what has been declared. <b>It is an unproven, hardware-light, quickly-deployable approach to Compute Verification</b>.</p>
+  <p>Telemetry data refers to the ‘metadata’ of a GPU. For example- a GPU’s power utilization, or the percentage of HBM that’s occupied, or the number of bytes flowing over the scale-up interconnect domain, etc.</p>
+  <p>Different workloads exhibit different patterns of telemetry. For example- pre-training is more compute intensive, which translates to higher power utilization. Alternatively, inference happens in pods- which means you see high communication within a pod, but very little across pod boundaries. Ultimately, the question is- Can we use these telemetry signatures to verify that workloads are compliant with a pre-existing agreement?</p>
+
+  <h2>Verification Architecture</h2>
+  <figure><img src="/static/overview/fig-architecture.png" alt="Inside the prover (neocloud or lab), GPUs send evidence (signed telemetry) to a verification node, which sends reported information to the verification organization (government, Averi, etc.)."></figure>
+  <p class="label">Terminology</p>
+  <ul>
+    <li>Prover: The datacenter operator who needs to prove their workloads are compliant with an AI agreement. Assumed adversarial.</li>
+    <li>Verifier: The Independent Verification Organization that responsible for verifying compliance with the agreement.</li>
+    <li>Verification Node: A physical, tamper-resistant server, that receives data from the Prover’s GPUs, runs a classifier to ensure compliance, and reports this information to the Verifier.</li>
+    <li>Collectors: Programs running on each of the Prover’s GPU nodes that report telemetry data to the Verification Node</li>
+  </ul>
+  <p>This architecture must guarantee at least two security properties</p>
+  <ul>
+    <li>Integrity of information received by the Verifier</li>
+    <li>Confidentiality of sensitive information gathered from the Prover</li>
+  </ul>
+  <p>To ensure the integrity of reported information, we must guarantee the integrity of (a) inbound information to the Verification Node, (b) the Verification Node itself, and (c) outbound information from the Verification Node to the Verifier. For (a) we’re assuming it will be possible to sign telemetry on the GPU die itself, before the prover has a chance to spoof it.<sup class="fn"><a id="fnref1" href="#fn1">1</a></sup> For (b) we rely on tamper-proof or tamper-evident enclosures around the Verification Node, to prevent the Prover from physically reading the private key, or otherwise tampering with the node. And for (c), we assume the Verification Node signs outbound traffic.</p>
+  <p>The Prover’s telemetry must also be kept confidential. Side-channel analysis on telemetry can reveal sensitive IP <span class="todo">[add links]</span>, which the Prover would not want to leak. So, all telemetry processing must be done on-site. The Prover should also have visibility into outbound traffic, to ensure the Verification Node isn’t exfiltrating sensitive information. Additionally, any reported information must be minimal, and the format must be pre-agreed, to minimize risks from any steganographic smuggling.</p>
+  <p>This architecture is hardware-light. It requires the install of one physical Verification Node, within a tamper-resistant / evident enclosure. Because telemetry is attested, it can be sent over the Prover’s networking infrastructure, with no specialized hardware sensors required. Installing a tamper-resistant node is also a problem with known solutions, so it doesn’t require any time for innovation.</p>
+  <p>This verification scheme should also be complemented with physical inspections and other approaches (eg. PoW-based approaches) to cross-verify that compute is being used as agreed. Also, this approach doesn’t account for (a) undeclared compute within the datacenter (which hopefully physical inspections can catch), or (b) workloads being split across multiple facilities, in a way that evades monitoring at each individual one.</p>
+
+  <h2>Prototype Details</h2>
+  <p>I implement this verification node in my demonstration. This is a server endpoint running in a <a href="https://fly.io">fly.io</a> container. You can install a collector script on your own GPUs [<a href="/debug#connect">link</a>] to report telemetry information to this node.</p>
+  <p>Collector.py sends telemetry to the verification node at 1 hz. This telemetry is polled from NVML, and includes per-GPU power draw, memory bandwidth, and networking data, amongst other fields [<a href="/debug#raw">link</a>].</p>
+  <figure><img src="/static/overview/fig-demo.png" alt="GPUs send reported telemetry to the verification node; the central scheduler sends declared Slurm workloads to the same node."></figure>
+  <p>There are two types of data the Collector receives- telemetry and declared workloads. Telemetry is reported at the node-level- ie. the collector can receive telemetry from multiple nodes simultaneously, as it would in a real deployment. It collates and overlays them on a graph [<a href="/debug#live">link</a>]. (For prototype purposes, it’s hard to find multi-node clusters for running separate workloads and reporting telemetry separately. So I’ve also enabled sub-nodes as the unit of telemetry reporting, within in single node. So it’s not the 8x box that’s the unit at which telemetry is sent, but it’s one box, divided into eg. 4 + 4 GPUs,with the two halves reporting data separately.)</p>
+  <p>The declared workload is reported at the cluster-level. A second script runs on the head node to report the slurm logs [<a href="/debug#slurm">link</a>]. The Collector then parses this, and represents this as a graph <span class="todo">[insert img?]</span> of GPUs over time. (In practice, Slurm is mostly used for research experimentation. Serving is orchestrated with Kubernetes, and pre-training doesn’t really need an scheduler. That being said, a “scheduler” stands in for “source of ground truth” in this demo. And the reported format might be different, but the Verifier Node will still end up with a similar graph for declared workloads.) The Verifier Node then uses the telemetry to confirm whether what’s running matches what was declared.</p>
+  <p>This demonstration verifies compliance with three rules. (a) You’re not running an undeclared load, when the GPUs are meant to be inactive, (b) you’re not running training when you claim to be running inference, and (c) you’re not sharing information across partition boundaries. It does so by <span class="todo">[____ add]</span>.</p>
+  <p>For this demo, we’re only considering two workloads- pre-training and inference (and time when no work is scheduled). An actual classifier would need to account for a greater range of workloads.</p>
+
+  <h2>Open Problems</h2>
+  <ul>
+    <li>Signing telemetry, dealing with verification authenticity
+      <ul><li>PKI, nonce provisioning, verifying firmware integrity periodically, etc</li></ul></li>
+    <li>Cross-node telemetry
+      <ul><li>NVML doesn’t expose infiniband data</li></ul></li>
+    <li>Ensuring no dark compute within a datacenter</li>
+    <li>Workload range / realism
+      <ul><li>Pre-training on a single node is not realistic.</li></ul></li>
+    <li>Realistic red-teaming (sparse training, etc)</li>
+    <li>This is within a single node. Doesn’t account for cross-node telemetry.</li>
+  </ul>
+
+  <ol class="notes">
+    <li id="fn1">This is not possible with current Nvidia firmware. This prototype assumes either it can be enabled with a firmware upgrade, or there exist other ways to fingerprint the telemetry. Another way to guarantee integrity of inbound data is through retrofitted hardware sensors (eg. network taps, or power monitors). <a href="#fnref1" aria-label="Back to the text">↩</a></li>
+  </ol>
+
+  <div class="foot">Draft written by Atharva; it will change. <a href="/replay">Open the demo →</a></div>
+</main>
+<script>
+  // TODO(before prod): remove with the button above. Paste the essay's Google Doc URL here.
+  const GDOC_URL = "https://docs.google.com/document/d/1NONM-TS9p_ridgv_7Y26XEFWGajACbxMZB92wkRTm8Y/edit?tab=t.0";
+  const g = document.getElementById("gdoc");
+  if (GDOC_URL) g.href = GDOC_URL;
+  else { g.setAttribute("aria-disabled", "true"); g.textContent = "Read as Google Doc (link not set)"; }
+</script>
+</body>
+</html>

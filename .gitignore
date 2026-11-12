@@ -1,0 +1,19 @@
+# Secrets (mirrored to Fly with `fly secrets set`)
+.env
+.env.*
+keys/
+*.key
+
+# Local environments and caches
+.venv/
+.cache/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Local-only: raw recordings (GPU serials), superseded pages, mock-ups, scratch notes
+recordings/*.jsonl
+parked-pages/
+mock-ups/
+\[C\]*.md
+torchtitan-pcie-h200.csv

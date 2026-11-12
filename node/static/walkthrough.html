@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Walkthrough · TWC verification node</title>
+<link rel="stylesheet" href="/static/base.css">
+<style>
+  /* Always light, even in OS dark mode (same as Overview). */
+  :root { color-scheme: light; --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+          --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10); --s1: #2a78d6; --flash: #fdf0c2; }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+            --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10); --s1: #2a78d6; --flash: #fdf0c2; }
+  }
+  body { font-size: 15px; line-height: 1.6; }
+  a { color: #1f5fbf; } a:hover { color: #163f80; }
+  body > main.setup { max-width: 760px; margin: 24px auto 96px; }
+  main h1 { font-size: 26px; line-height: 1.25; margin-bottom: 6px; }
+  .lede { margin: 0; color: var(--ink2); }
+  section { margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--grid); display: flex; flex-direction: column; gap: 12px; }
+  section[hidden] { display: none; }
+  section > h2 { font-size: 18px; font-weight: 600; margin: 0; display: flex; gap: 10px; align-items: baseline; }
+  section > h2 .n { font: 13px ui-monospace, Menlo, monospace; color: var(--muted); }
+  section p { margin: 0; max-width: 68ch; }
+  .label { font-size: 12px; font-weight: 600; color: var(--ink2); letter-spacing: .04em; text-transform: uppercase; }
+  /* Variant B: one segmented switch for the big choice, quiet pills for everything else. */
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pills button { font: inherit; font-size: 14px; padding: 4px 12px; border: 0; border-radius: 6px;
+                  background: transparent; color: var(--ink2); cursor: pointer; }
+  .pills button:hover:not(.on):not(:disabled) { background: rgba(11,11,11,.05); }
+  .pills button.on { background: var(--grid); color: var(--ink); font-weight: 600; }
+  .pills button:disabled { color: var(--axis); cursor: not-allowed; }
+  .pills button.on:disabled { color: var(--ink); }
+  .pills.big { display: inline-flex; flex-wrap: nowrap; align-self: flex-start; padding: 3px; gap: 2px; border-radius: 9px; background: #e8e7e1; }
+  .pills.big button { font-size: 15px; padding: 6px 22px; border-radius: 7px; }
+  .pills.big button:hover:not(.on) { background: rgba(11,11,11,.04); }
+  .pills.big button.on { background: var(--surface); box-shadow: 0 1px 2px rgba(11,11,11,.12); }
+  .cmd { display: flex; gap: 10px; align-items: flex-start; }
+  .cmd pre, .cmd textarea { margin: 0; flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; font-size: 12.5px; line-height: 1.65; }
+  .cmd .c { color: var(--muted); }
+  .cmd textarea { border: 0; outline: 0; background: transparent; resize: vertical; color: var(--ink);
+                  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .cmd button { font: inherit; font-size: 12.5px; padding: 4px 12px; border: 1px solid var(--ring); border-radius: 6px;
+                background: var(--page); color: var(--ink); cursor: pointer; }
+  .kv { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 4px 12px; font-size: 14px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; }
+  .mock { font: 11px ui-monospace, Menlo, monospace; background: #fff2c4; color: #6b5200; border-radius: 3px; padding: 1px 6px; }
+  .status { font-size: 13.5px; color: var(--ink2); }
+  .status .dot { background: var(--axis); } .status.on .dot { background: var(--good); }
+  .verdict { font-weight: 500; }
+  .stop { display: flex; flex-direction: column; gap: 8px; }
+  ul.tight { margin: 0; padding-left: 20px; font-size: 14px; }
+  ul.tight li { margin: 3px 0; }
+  dd ul.tight { padding-left: 16px; }
+  .sub2 { color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<script src="/static/nav.js"></script>
+<main class="setup">
+  <h1>Walkthrough</h1>
+  <p class="lede">This walkthrough assumes you have an 8x Nvidia SXM node. If you don't, <a href="/debug#live">click here</a>.</p>
+
+  <section>
+    <h2><span class="n">1</span>Install everything</h2>
+    <p>Paste this on your GPU box. It installs:</p>
+    <ul class="tight">
+      <li>The telemetry collector</li>
+      <li>vLLM for inference workloads</li>
+      <li>TorchTitan for training workloads</li>
+    </ul>
+    <p>The script is the same on every box. It also offers an optional Hugging Face login; a read-only token is enough. Everything it prints is kept in <span class="mono">~/.twc-setup/logs/setup.log</span>.</p>
+    <p>Password: the same one you used to log in to this site.</p>
+    <div class="cmd card"><pre class="mono" id="install"></pre><button data-copy="install">Copy</button></div>
+    <div class="status" id="boxstatus"><span class="dot"></span><span id="boxtext">Waiting for a box to start streaming…</span></div>
+    <div class="label" style="margin-top:8px">Pick your GPUs</div>
+    <div class="pills" id="gpu"></div>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span>Try Running a Workload</h2>
+    <p>Choose a default inference or training workload. You can optionally customize it as well.</p>
+    <div class="pills big" id="kind"></div>
+    <div class="pills" id="workload"></div>
+    <p id="wl-what"></p>
+    <div class="cmd card"><pre class="mono" id="wl-cmd"></pre><button data-copy="wl-cmd">Copy</button></div>
+    <dl class="kv">
+      <dt>What to look for</dt><dd><ul class="tight" id="wl-see"></ul></dd>
+      <dt>Try changing</dt><dd><ul class="tight" id="wl-try"></ul></dd>
+    </dl>
+    <div id="wl-mock"></div>
+    <p><a href="/replay">Watch the telemetry on the Replay demo →</a></p>
+    <div class="stop">
+      <div class="label">Done? Stop the workload</div>
+      <div class="cmd card"><pre class="mono" id="stop"></pre><button data-copy="stop">Copy</button></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">3</span>Connect the scheduler and run the checker</h2>
+    <p>Jobs declare what they are, and the checker compares that with what the GPUs do. Run this once to connect Slurm.</p>
+    <div class="cmd card"><pre class="mono" id="sched"></pre><button data-copy="sched">Copy</button></div>
+    <div class="label" style="margin-top:8px">Then pick a scenario</div>
+    <p class="sub2">Each one starts by setting how the box reports: as two 4-GPU nodes or as one. Stop the previous scenario first, with the stop commands in section 2.</p>
+    <div class="pills" id="scenario"></div>
+    <p id="sc-what"></p>
+    <div class="cmd card"><pre class="mono" id="sc-cmd"></pre><button data-copy="sc-cmd">Copy</button></div>
+    <dl class="kv">
+      <dt>Expect</dt><dd id="sc-expect" class="verdict"></dd>
+    </dl>
+    <div id="sc-mock"></div>
+    <p><a href="/replay">See the declarations and verdicts on the Replay demo →</a></p>
+  </section>
+
+  <!-- Section 4 (build your own evasion) is hidden for now, at Atharva's request (2026-11-10). Its markup and
+       script stay so it can come back by deleting the "hidden" attribute. It still uses the stand-in workload. -->
+  <section hidden>
+    <h2><span class="n">4</span>Now try to beat it</h2>
+    <p>Do as much training as you can while every rule keeps holding.</p>
+    <div class="label">Declare the job as</div><div class="pills" id="x-declare"></div>
+    <div class="label">Actually run</div><div class="pills" id="x-run"></div>
+    <div class="label">On</div><div class="pills" id="x-gpus"></div>
+    <div class="label" id="x-steps-label">Burst length</div><div class="pills" id="x-steps"></div>
+    <div class="cmd card"><textarea id="x-cmd" rows="5" spellcheck="false" aria-label="Your evasion command"></textarea><button data-copy="x-cmd">Copy</button></div>
+    <div><span class="mock">not wired up yet</span></div>
+    <div class="label" style="margin-top:8px">Known weak spots</div>
+    <ul class="tight">
+      <li>GPUs under 200 W are never judged</li>
+      <li>Steps under 100 ms hide lockstep</li>
+      <li>Sensor noise weakens the lockstep signal</li>
+      <li>Tensor-parallel serving already looks like training</li>
+    </ul>
+  </section>
+</main>
+<script src="/static/live.js"></script>
+<script>
+  const local = ["localhost", "127.0.0.1"].includes(location.hostname);
+  const node = local ? "http://127.0.0.1:18999" : location.origin;
+  // A wrong password gets a redirect with an empty body, which curl saves without complaint; hence the -s check.
+  const fetchAndRun = (file, args) => `{
+  read -rsp "TWC password: " P; echo
+
+  curl -fsSu ":$P" ${node}/${file} -o /tmp/${file} &&
+  if [ -s /tmp/${file} ]; then
+    TWC_PASSWORD="$P" python3 /tmp/${file} ${args}
+  else
+    echo "Couldn't download ${file}: wrong password?"
+  fi
+}`;
+  // Comment lines render muted; textContent (what Copy uses) is unchanged.
+  const esc = t => t.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const setCmd = (id, text) => { document.getElementById(id).innerHTML = esc(text).replace(/^\s*#.*$/gm, m => `<span class="c">${m}</span>`); };
+  const $ = id => document.getElementById(id);
+
+  // One serving model per box. Each is a mixture-of-experts model too big for one GPU, so every layout spans GPUs.
+  const DS = { family: "ds", model: "deepseek-ai/DeepSeek-V4.1-Flash-1017", name: "DeepSeek V4.1 Flash", gb: 511 };
+  const BOXES = {
+    H100: { family: "mm", model: "MiniMaxAI/MiniMax-M3.1-Flash", name: "MiniMax M3.1 Flash", gb: 252 },
+    H200: DS, B200: DS, B300: DS,
+  };
+  const box = () => BOXES[state.gpu];
+
+  // vllm serve flags per model and layout: "tp8" and "ep8" are one copy on all 8 GPUs, "tp4" is one pod of two.
+  // DeepSeek: the flags from our own H200 runs (telemetry-logs/serving-traces-vllm/runs/c1, c2, c3), minus the
+  // chat parsers and logging flags. MiniMax: the Hopper command from vLLM's recipe, which only covers TP8.
+  const DSPARK = `--speculative-config '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'`;
+  const ENGRAM = `--engram-config '{"cpu_offload":true}'`;
+  const DS_COMMON = ["--language-model-only", "--tokenizer-mode deepseek_v41", DSPARK, "--safetensors-load-strategy prefetch"];
+  const MM_COMMON = ["--reasoning-parser minimax_m3", "--block-size 128", "--kv-cache-dtype fp8",
+    `--attention-config '{"indexer_kv_dtype": "fp8"}'`, `--compilation-config '{"cudagraph_mode": "FULL_AND_PIECEWISE"}'`,
+    `--limit-mm-per-prompt '{"video": 0}'`, "--gpu-memory-utilization 0.9", "--no-enable-log-requests",
+    "--disable-hybrid-kv-cache-manager", "--moe-backend marlin", "--enable-auto-tool-choice", "--tool-call-parser minimax_m3"];
+  const FLAGS = {
+    ds: { tp8: ["--tensor-parallel-size 8", ...DS_COMMON, ENGRAM],
+          ep8: ["--data-parallel-size 8", "--enable-expert-parallel", ...DS_COMMON],
+          tp4: ["--tensor-parallel-size 4", ...DS_COMMON, ENGRAM, "--max-num-batched-tokens 4096", "--max-num-seqs 256"] },
+    mm: { tp8: ["--tensor-parallel-size 8", ...MM_COMMON, "--max-model-len 262144", "--max-num-seqs 80"],
+          ep8: ["--data-parallel-size 8", "--enable-expert-parallel", ...MM_COMMON, "--max-model-len 262144", "--max-num-seqs 80"],
+          tp4: ["--tensor-parallel-size 4", ...MM_COMMON, "--max-model-len 65536", "--max-num-seqs 16"] },
+  };
+  const ENV = { ds: "export VLLM_USE_RUST_FRONTEND=1 VLLM_ENGINE_READY_TIMEOUT_S=7200", mm: "" };
+  // How far each command has been tested. Shown under the command, so nobody mistakes a guess for a recipe.
+  const TESTED = {
+    ds: { H200: "ran on H200 with vLLM 0.32.0; not rerun on 0.33.0", other: "the H200 command; not run on Blackwell" },
+    mm: { tp8: "from vLLM's recipe; not run by us", ep8: "our guess: vLLM's recipe has no expert-parallel layout for H100",
+          tp4: "our guess: 252 GB of weights in a 320 GB pod is tight" },
+  };
+  const tested = layout => `server: ${box().family === "ds" ? TESTED.ds[state.gpu] || TESTED.ds.other : TESTED.mm[layout]} · load: not run by us`;
+
+  // The CUDA toolkit's folder is on the path too: vLLM builds its attention routines at first start and needs
+  // the compiler there. A shell that isn't a normal login (a Slurm job, say) may not have it.
+  const PATHLINE = "export PATH=$HOME/.twc-setup/vllm-venv/bin:/usr/local/cuda/bin:$PATH";
+  const PY = "~/.twc-setup/vllm-venv/bin/python";
+  const WL = "~/.twc-setup/twc_workloads.py";   // MOCK: the node doesn't hand this out yet
+  const indent = (t, n) => t.split("\n").map(l => " ".repeat(n) + l).join("\n");
+  const setup = () => [PATHLINE, ENV[box().family]].filter(Boolean).join("\n");
+  const serve = (layout, port, gpus) => `${gpus ? `CUDA_VISIBLE_DEVICES=${gpus} ` : ""}nohup vllm serve ${box().model} \\
+${[...FLAGS[box().family][layout], `--port ${port}`].map(f => `  ${f} \\`).join("\n")}
+  > ~/serve-${port}.log 2>&1 &`;
+  // Prints the server log's last line while waiting, so a long download or load doesn't look like a hang.
+  const ready = port => `until curl -sf localhost:${port}/health > /dev/null; do
+  echo "$(date +%T) starting: $(tr '\\r' '\\n' < ~/serve-${port}.log | tail -n 1 | cut -c1-110)"
+  sleep 15
+done; echo "the server on port ${port} is ready"`;
+  // Bursty, interactive-style load. Request and response sizes come from BurstGPT (a public trace of a real
+  // ChatGPT-style service); the prompt text is synthetic, and arrival times come from --request-rate and --burstiness.
+  const TRACE = "# Get BurstGPT: request sizes from a real ChatGPT-style service (142 MB)\ncurl -L -o ~/burstgpt.csv https://github.com/HPMLL/BurstGPT/releases/download/v1.1/BurstGPT_without_fails_2.csv";
+  const bench = (port, rate) => `vllm bench serve \\
+  --model ${box().model} \\
+  --port ${port} \\
+  --dataset-name burstgpt \\
+  --dataset-path ~/burstgpt.csv \\
+  --request-rate ${rate} \\
+  --burstiness 0.5 \\
+  --ignore-eos \\
+  --num-prompts 20000`;
+  const LOAD_TRY = ["--request-rate: requests per second", "--burstiness: below 1 is burstier, above 1 is steadier"];
+
+  const TT = "~/.twc-setup/torchtitan";
+  // Built per render, because the model and its flags depend on the box picked in section 1.
+  const inference = () => {
+    const b = box(), first = `# Needs ${b.name} (${b.gb} GB). Setup downloads it in the background; check with:\n#   ~/.twc-setup/bin/twc-progress\n`;
+    return [
+      { id: "tp8", label: "Tensor-parallel", what: `One copy of ${b.name}. Every layer is split across all 8 GPUs (TP8).`,
+        cmd: [setup(), first + serve("tp8", 8100), "# Wait until it's ready: the download if needed, then loading into the GPUs\n" + ready(8100), TRACE, "# Send it bursty load\n" + bench(8100, 2)],
+        see: ["All 8 GPUs move together", "Power rises and falls with the bursts"],
+        tryit: LOAD_TRY,
+        mock: tested("tp8") },
+      { id: "ep8", label: "Expert-parallel", what: `One copy of ${b.name}. Attention runs on every GPU; the experts are spread across all 8 (DP8 + EP).`,
+        cmd: [setup(), first + serve("ep8", 8100), "# Wait until it's ready: the download if needed, then loading into the GPUs\n" + ready(8100), TRACE, "# Send it bursty load\n" + bench(8100, 2)],
+        see: ["Lower, flatter power than Tensor-parallel"],
+        tryit: ["Compare power per GPU with Tensor-parallel at the same load", ...LOAD_TRY],
+        mock: tested("ep8") },
+      { id: "pods", label: "Two pods", what: `Two independent copies of ${b.name}, 4 GPUs each (TP4 × 2).`,
+        cmd: [setup(), first + "# Start one server per half\n" + serve("tp4", 8101, "0,1,2,3"), serve("tp4", 8102, "4,5,6,7"), "# Wait until both are ready: the download if needed, then loading into the GPUs\n" + ready(8101) + "\n" + ready(8102), TRACE, "# Send each one bursty load\n" + bench(8101, 1) + " &", bench(8102, 1) + " &"],
+        see: ["Each half moves together", "The two halves don't"],
+        tryit: ["Send one pod far more load", ...LOAD_TRY],
+        mock: tested("tp4") },
+    ];
+  };
+  // TorchTitan, Llama 3 8B, one FSDP job on every box. TWC_BATCH is the largest per-GPU batch that fits with the
+  // default settings. Numbers are in "[C] torchtitan-trial-h200.md": memory is about 22 GiB + 23.7 GiB per sequence.
+  const TRAIN = {
+    H100: { batch: 2, tag: "ran on an H200 capped to 80 GB; not on a real H100" },
+    H200: { batch: 4, tag: "ran on one H200 box, short runs" },
+    B200: { batch: 6, tag: "batch size estimated from H200; not run on Blackwell" },
+    B300: { batch: 8, tag: "batch size estimated from H200; not run on Blackwell" },
+  };
+  const pretraining = () => [
+    { id: "torchtitan", label: "TorchTitan 8B", what: "Trains an 8B-parameter Llama 3 from scratch. One job, with the model split across all 8 GPUs.",
+      cmd: [`cd ${TT}\nsource .venv/bin/activate`,
+        `# Train. The data streams from Hugging Face as it runs.
+TWC_BATCH=${TRAIN[state.gpu].batch} TWC_SEQ_LEN=8192 TWC_REMAT=default TWC_STEPS=100000 \\
+  MODULE=twc_recipes CONFIG=llama3_8b_twc PYTHONUNBUFFERED=1 \\
+  nohup ./run_train.sh --output-dir ~/tt-run \\
+  > ~/train.log 2>&1 &`,
+        "# Watch it: a line every 10 steps (Ctrl-C stops watching, not the training)\ntail -f ~/train.log | grep --line-buffered \"step:\""],
+      see: ["All 8 GPUs sit near the power cap", "No visible per-step rhythm", "Steady NVLink traffic"],
+      tryit: ["TWC_BATCH: sequences per GPU per step. More memory, longer steps",
+              "TWC_SEQ_LEN: tokens per sequence. Same trade",
+              "TWC_REMAT=full: recompute activations. About 60% less memory, 10% slower, and a faint per-step rhythm appears"],
+      mock: TRAIN[state.gpu].tag },
+  ];
+  const STOP = ['scancel --user=$USER 2>/dev/null', 'pkill -f "[v]llm bench"', 'pkill -f "[v]llm serve"', 'pkill -9 -f "[V]LLM::"', 'pkill -f "[t]wc_workloads"', 'pkill -f "[t]orchtitan.train"'];
+
+  // ---- section 3. Each scenario's first line sets how the box reports itself: as two 4-GPU nodes, so the two
+  // halves show as separate boxes on the graphs, or as one 8-GPU node. twc-split does nothing if it's already so.
+  const SPLIT = { two: "# Report this box as two 4-GPU nodes, so the halves show separately\n~/.twc-setup/bin/twc-split 4+4",
+                  one: "# Report this box as one 8-GPU node\n~/.twc-setup/bin/twc-split off" };
+  // A Slurm job. The script goes in on stdin, so the quotes inside it need no escaping.
+  const job = (gpus, type, name, body) => `sbatch --gres=gpu:${gpus} --comment=declared:${type} --job-name=${name} <<'EOF'
+#!/bin/bash
+${body}
+EOF`;
+  const trainEnv = n => `NGPU=${n} TWC_BATCH=${TRAIN[state.gpu].batch} TWC_SEQ_LEN=8192 TWC_STEPS=100000 \\
+  MODULE=twc_recipes CONFIG=llama3_8b_twc PYTHONUNBUFFERED=1 \\`;
+  const trainJob = n => `cd ${TT} && source .venv/bin/activate
+${trainEnv(n)}
+  ./run_train.sh --output-dir ~/tt-run > ~/train.log 2>&1`;
+  const podJob = port => `${setup()}
+[ -f ~/burstgpt.csv ] || curl -sL -o ~/burstgpt.csv https://github.com/HPMLL/BurstGPT/releases/download/v1.1/BurstGPT_without_fails_2.csv
+${serve("tp4", port)}
+until curl -sf localhost:${port}/health > /dev/null; do sleep 15; done
+${bench(port, 1)}`;
+  // Scenario C: one inference service split across the two halves. The prefill server reads each prompt and the
+  // decode server writes the answer; UCX_TLS=^cuda_ipc keeps the hand-off off the direct GPU-to-GPU path, so it
+  // goes through host memory and shows up on PCIe. Ran on H200 (see "[C] pd-over-pcie-trial.md").
+  const pdJob = (port, side) => `${setup()}
+export UCX_TLS=^cuda_ipc VLLM_NIXL_SIDE_CHANNEL_HOST=127.0.0.1 VLLM_NIXL_SIDE_CHANNEL_PORT=${side}
+vllm serve ${box().model} \\
+${[...FLAGS[box().family].tp4.filter(f => !f.startsWith("--max-num-seqs")), "--max-num-seqs 32",
+     `--kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'`, `--port ${port}`].map(f => `  ${f} \\`).join("\n")}
+  > ~/serve-${port}.log 2>&1`;
+  const pdProxy = `# The proxy that passes each request from the first half to the second
+nohup python ~/.twc-setup/pd_proxy.py --host 127.0.0.1 --port 8192 \\
+  --prefiller-hosts 127.0.0.1 --prefiller-ports 8101 \\
+  --decoder-hosts 127.0.0.1 --decoder-ports 8102 \\
+  > ~/proxy.log 2>&1 &`;
+  const pdLoad = () => `# Long prompts, so each hand-off is big enough to see
+vllm bench serve \\
+  --model ${box().model} \\
+  --port 8192 \\
+  --random-input-len 20000 \\
+  --random-output-len 32 \\
+  --ignore-eos \\
+  --max-concurrency 4 \\
+  --num-prompts 5000`;
+  const scenarios = () => [
+    { id: "ok", label: "Running as declared", what: "Pretraining on four GPUs and inference on the other four, declared truthfully.",
+      cmd: [SPLIT.two, "# Pretraining, declared as pretraining\n" + job(4, "pretraining", "pretrain", trainJob(4)),
+            "# Inference, declared as inference\n" + job(4, "inference", "serve", podJob(8101))],
+      expect: "Every rule holds. The two halves look different.", mock: "not run yet" },
+    { id: "a", label: "Evading A: off the books", what: "Train on all eight GPUs with no job declared.",
+      cmd: [SPLIT.one, `# Training, started outside Slurm\ncd ${TT} && source .venv/bin/activate\n${trainEnv(8)}\n  nohup ./run_train.sh --output-dir ~/tt-run > ~/train.log 2>&1 &`],
+      expect: "Caught: undeclared_load on all eight GPUs.", mock: "not run yet" },
+    { id: "b", label: "Evading B: mislabelled", what: "Declare one inference job on all eight GPUs, then train on them.",
+      cmd: [SPLIT.one, "# Training, declared as inference\n" + job(8, "inference", "serve", trainJob(8))],
+      expect: "Caught: training_shaped.", mock: "not run yet" },
+    { id: "c", label: "Evading C: talking across the boundary",
+      what: "On paper, two separate inference jobs, four GPUs each. In reality it is one inference service split across both halves. The first half reads the prompts and hands its work to the second half, which writes the answers.",
+      cmd: [SPLIT.two,
+            "# Declared as its own inference job. Really: the half that reads the prompts\n" + job(4, "inference", "serve-1", pdJob(8101, 5600)),
+            "# Declared as its own inference job. Really: the half that writes the answers\n" + job(4, "inference", "serve-2", pdJob(8102, 5700)),
+            "# Wait until both are ready: about 15 minutes when they load together\n" + setup() + "\n" + ready(8101) + "\n" + ready(8102),
+            pdProxy, pdLoad()],
+      expect: "Not caught on one box, for now. boundary_traffic reads what a node sends to other nodes over the network, and here both halves sit on the same box, so nothing crosses a network. The earlier stand-in, each GPU's PCIe traffic (about 0.45 GB/s here), is switched off. Across two nodes the same split is caught: see One job split in two on the Replay demo.",
+      mock: box().family === "ds" ? (state.gpu === "H200" ? "servers and proxy ran on H200 outside Slurm; not run as Slurm jobs; load command not run" : "the H200 commands; not run on Blackwell")
+                                  : "our guess: not tested for MiniMax on H100" },
+  ];
+  const SCENARIO_IDS = ["ok", "a", "b", "c"];
+
+  const state = { gpu: "H200", kind: "inference", workload: { inference: "tp8", pretraining: "torchtitan" }, scenario: "ok",
+                  declare: "inference", run: "duty", gpus: "all", steps: "long" };
+
+  function pills(id, options, get, set) {
+    const el = $(id);
+    el.innerHTML = options.map(o => `<button type="button" data-v="${o.id}" class="${get() === o.id ? "on" : ""}" ${o.disabled ? `disabled title="${o.disabled}"` : ""}>${o.label}</button>`).join("");
+    el.querySelectorAll("button:not(:disabled)").forEach(b => b.onclick = () => { set(b.dataset.v); render(); });
+  }
+  const mockTag = (el, msg) => { el.innerHTML = msg ? `<span class="mock">${msg === true ? "not wired up yet" : msg}</span>` : ""; };
+  const setList = (id, items) => { $(id).innerHTML = items.map(t => `<li>${esc(t)}</li>`).join(""); };
+
+  function render() {
+    pills("gpu", ["H100", "H200", "B200", "B300", "Other"].map(g => ({ id: g, label: g === "Other" ? "Other" : `8× ${g}`, disabled: g === "Other" ? "Only 8× SXM boxes for now" : "" })), () => state.gpu, v => state.gpu = v);
+    pills("kind", [{ id: "inference", label: "Inference" }, { id: "pretraining", label: "Pretraining" }], () => state.kind, v => state.kind = v);
+    const list = state.kind === "inference" ? inference() : pretraining();
+    pills("workload", list, () => state.workload[state.kind], v => state.workload[state.kind] = v);
+    $("workload").style.display = list.length > 1 ? "" : "none";
+    const w = list.find(x => x.id === state.workload[state.kind]);
+    $("wl-what").textContent = w.what; setCmd("wl-cmd", w.cmd.join("\n\n"));
+    setList("wl-see", w.see); setList("wl-try", w.tryit); mockTag($("wl-mock"), w.mock);
+
+    const SCENARIOS = scenarios();
+    pills("scenario", SCENARIOS, () => state.scenario, v => state.scenario = v);
+    const s = SCENARIOS.find(x => x.id === state.scenario);
+    $("sc-what").textContent = s.what; setCmd("sc-cmd", s.cmd.join("\n\n"));
+    $("sc-expect").textContent = s.expect; mockTag($("sc-mock"), s.mock);
+
+    pills("x-declare", [{ id: "inference", label: "Inference" }, { id: "pretraining", label: "Pretraining" }, { id: "none", label: "Nothing" }], () => state.declare, v => state.declare = v);
+    pills("x-run", [{ id: "duty", label: "Training-like bursts" }, { id: "train", label: "Lockstep training" }, { id: "matmul", label: "Flat-out compute" }], () => state.run, v => state.run = v);
+    pills("x-gpus", [{ id: "four", label: "The 4 GPUs it asked for" }, { id: "all", label: "All 8" }], () => state.gpus, v => state.gpus = v);
+    pills("x-steps", [{ id: "long", label: "4 s on, 1 s off" }, { id: "short", label: "0.1 s on, 0.1 s off" }], () => state.steps, v => state.steps = v);
+    const isDuty = state.run === "duty";
+    $("x-steps").style.display = $("x-steps-label").style.display = isDuty ? "" : "none";
+    const phase = isDuty ? `duty:600,${state.steps === "long" ? "on=4,off=1" : "on=0.1,off=0.1"}` : `${state.run}:600`;
+    const body = `${state.gpus === "all" ? "env -u CUDA_VISIBLE_DEVICES " : ""}${PY} ${WL} "${phase}"`;
+    const comment = state.declare === "none" ? "" : ` --comment=declared:${state.declare}`;
+    $("x-cmd").value = `sbatch \\
+  --gres=gpu:4 \\${comment ? `\n  ${comment.trim()} \\` : ""}
+  --wrap '${body}'`;
+  }
+
+  setCmd("install", fetchAndRun("setup.py", `--node ${node}`));
+  setCmd("stop", STOP.join("\n"));
+  setCmd("sched", fetchAndRun("slurm_reporter.py", `install --install-slurm --node ${node}`));
+  render();
+  document.querySelectorAll("[data-copy]").forEach(b => b.onclick = e => {
+    const t = $(b.dataset.copy); navigator.clipboard.writeText(t.value ?? t.textContent);
+    e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy", 1200);
+  });
+
+  // The box status line comes from the same 1 s poll as the Debug tab.
+  TWCLive.subscribe(d => {
+    const hosts = Object.keys(d);
+    $("boxstatus").className = "status" + (hosts.length ? " on" : "");
+    $("boxtext").textContent = hosts.length ? `Streaming from ${hosts.map(h => `${h} (${d[h].label})`).join(", ")}` : "Waiting for a box to start streaming…";
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Replay demo · TWC</title>
+<link rel="stylesheet" href="/static/base.css">
+<style>
+  /* The Replay demo, served at /replay (kept outside static/ so that is its only address). It plays real recordings:
+     once-a-second readings in static/replay-data/, written by make_replay_data.py, which also runs the real rules
+     over them for step 2. Still made up: "Add your GPUs" (the your-box view). The version with made-up data, earlier
+     stages, the old live page and IVO: demo-classifier/parked-pages/. */
+  .mockbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 18px; padding: 8px 12px;
+             border: 1px dashed var(--axis); border-radius: 10px; font-size: 12.5px; color: var(--ink2); }
+  .mockbar b { color: var(--ink); letter-spacing: .04em; font-size: 11.5px; }
+  .mockbar .what { flex-basis: 100%; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--ring); border-radius: 7px; overflow: hidden; }
+  .seg button { font: inherit; font-size: 12.5px; border: 0; background: var(--page); color: var(--ink2); padding: 4px 12px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--ring); }
+  .seg button.on { background: var(--grid); color: var(--ink); font-weight: 600; }
+  kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--ring); border-radius: 4px; padding: 0 4px; }
+
+  .mockbar .lab { font-weight: 600; color: var(--ink); margin-right: -4px; }
+  /* tighter page: a narrower column (so more margin left and right) and less space between things */
+  /* The left edge sits where the site's 1080 px column starts, so the top bar does not shift between tabs. The main
+     column keeps the width it had beside a 292 px diagram (772 px); the diagram column is 340 px, so the page runs
+     48 px further right than other tabs, hanging into the right margin (and up to 20 px into the page's own padding
+     on a narrow window, before the main column gives anything up). */
+  body > #app { max-width: 1128px !important; margin-left: max(0px, calc((100% - 1080px) / 2)) !important; margin-right: -20px !important; }
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .head h1 { margin: 0; }
+  .grow { flex: 1; }
+  .clock { font: 13px ui-monospace, Menlo, monospace; color: var(--ink2); }
+  .btn { font: inherit; font-size: 12.5px; border: 1px solid var(--axis); border-radius: 0; background: transparent;
+         color: var(--ink); padding: 4px 12px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--grid); }
+  .btn.primary { background: var(--ink); color: var(--page); border-color: var(--ink); }
+  .btn.quiet { border-color: transparent; }
+  .livedot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); display: inline-block; margin-right: 6px; }
+  .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); display: inline-block; margin-right: 6px; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  /* the Walkthrough's pills: quiet ones for a list of choices, the "big" switch for the one main choice */
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pills button { font: inherit; font-size: 14px; padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--ink2); cursor: pointer; }
+  .pills button:hover:not(.on) { background: rgba(11,11,11,.05); }
+  .pills button.on { background: var(--grid); color: var(--ink); font-weight: 600; }
+  .pills.big { display: inline-flex; flex-wrap: nowrap; padding: 3px; gap: 2px; border-radius: 9px; background: #e8e7e1; }
+  .pills.big button { font-size: 15px; padding: 6px 22px; border-radius: 7px; }
+  .pills.big button:hover:not(.on) { background: rgba(11,11,11,.04); }
+  .pills.big button.on { background: var(--surface); box-shadow: 0 1px 2px rgba(11,11,11,.12); }
+  /* lever rows: one row per thing that differs between recordings */
+  .levers { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: center; }
+  .levers .ln { font-size: 13.5px; font-weight: 600; padding-left: 12px; }
+  .levers .pills button { font-size: 13.5px; padding: 3px 11px; }
+  .levers .pills button.far { color: var(--muted); }
+  .levers .pills button:disabled { color: var(--axis); cursor: default; background: transparent; }
+  .wl { display: flex; align-items: center; gap: 14px; justify-self: stretch; }
+  .how { min-width: 320px; max-width: 460px; white-space: normal; line-height: 1.45; } .how b { font-weight: 600; } .how code { font: 11.5px ui-monospace, Menlo, monospace; }
+  .how a { color: var(--s1); }
+  .scnote { margin: 0 0 0 12px; font-size: 13px; color: var(--ink2); max-width: 700px; } .scnote b { font-weight: 600; color: var(--ink); }
+  .scnote .played { color: var(--muted); }
+  .scnote .k-missed, .scnote .k-false { color: var(--crit); } .scnote .k-caught, .scnote .k-holds { color: var(--good); }
+  .phase { font-size: 12.5px; color: var(--muted); margin: -4px 0 10px 38px; min-height: 18px; }
+  .label { font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink); margin: 0 0 3px 12px; }
+  .lede { margin: 0 0 12px; }
+  .sel { display: grid; gap: 10px; justify-items: start; margin-bottom: 12px; }
+  .transport { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .transport input[type=range] { flex: 1; accent-color: var(--ink); }
+  .transport .time { font: 12.5px ui-monospace, Menlo, monospace; color: var(--ink); min-width: 96px; }
+  .playbtn { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--axis); background: transparent; color: var(--ink); cursor: pointer; font-size: 11px; }
+  .seg.sp button { background: transparent; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }   /* left: everything you operate and read; right: the diagram, alone */
+  .side { position: sticky; top: 56px; display: grid; gap: 0; }
+  @media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } .side { position: static; } }
+
+  /* panes: square, thin border, small capitalised title strip */
+  .pane { border: 1px solid var(--axis); background: var(--surface); margin-bottom: 10px; }
+  .pane h2 { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; margin: 0; padding: 6px 12px; min-height: 31px;
+             border-bottom: 1px solid var(--axis); display: flex; align-items: center; gap: 14px; }
+  .pane .pb { padding: 10px 12px 12px; }
+  .side .pane { margin-bottom: 0; }
+  /* a pane that belongs to step 2, shown early: same shape, drained of colour, one click away */
+  .pane.later { border-color: var(--grid); }
+  .pane.later h2 { color: var(--muted); border-bottom-color: var(--grid); }
+  .pane.later .pb { opacity: .34; filter: grayscale(1); pointer-events: none; }
+  .stepnote { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 12px; }
+
+  /* optional readings: a menu in the Telemetry header */
+  .cb { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 400; text-transform: none; letter-spacing: 0; cursor: pointer; white-space: nowrap; }
+  .cb input { margin: 0; accent-color: var(--ink); }
+  details.menu { position: relative; font-size: 12.5px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+  details.menu summary { cursor: pointer; list-style: none; border: 1px solid var(--axis); padding: 1px 9px; }
+  details.menu summary::-webkit-details-marker { display: none; }
+  details.menu summary::after { content: " ▾"; }
+  details.menu > div { position: absolute; right: 0; top: calc(100% + 4px); z-index: 6; background: var(--surface); border: 1px solid var(--axis); padding: 9px 12px;
+                       display: grid; gap: 7px; box-shadow: 0 6px 20px rgba(0,0,0,.1); }
+
+  .seg.zm { border-radius: 0; border-color: var(--axis); font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .seg.zm button { padding: 1px 9px; background: transparent; } .seg.zm button + button { border-left-color: var(--axis); } .seg.zm button.on { background: var(--grid); }
+  .tl { cursor: pointer; position: relative; }
+  .tl.nolink { cursor: default; }
+  .tl svg { display: block; width: 100%; }
+  .jtip { position: absolute; display: none; pointer-events: none; z-index: 3; background: var(--ink); color: var(--surface);
+          font-size: 12px; line-height: 1.5; padding: 6px 10px; white-space: nowrap; }
+  .jtip b { font-weight: 600; } .jtip .m { opacity: .72; } .jtip .bad { color: #ff9d9d; }
+  #app .compact .boxes { margin: 0; }
+  #app .box .st, #app .box .pill { display: none; }   /* no "recording" / "streaming" notes beside each node */
+
+  /* rules */
+  .rule { display: grid; grid-template-columns: 14px 180px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--grid); }
+  .rule:first-of-type { padding-top: 2px; } .rule:last-of-type { border-bottom: 0; padding-bottom: 0; }
+  .rule .dot { width: 9px; height: 9px; border-radius: 50%; margin: 0; }
+  .rname { font: 13px ui-monospace, Menlo, monospace; }
+  .rtext { font-size: 13.5px; }
+  .rule .pill { font-size: 12px; padding: 1px 9px; border-radius: 0; white-space: nowrap; }
+  .pill.ok { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good); }
+  .pill.bad { background: color-mix(in srgb, var(--crit) 14%, transparent); color: var(--crit); }
+  .pill.wait { background: var(--grid); color: var(--ink2); }
+
+  /* connect steps */
+  .steps { display: grid; gap: 12px; }
+  .step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; }
+  .step .n { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--axis); font-size: 11.5px; display: flex; align-items: center; justify-content: center; }
+  .step b { font-size: 13.5px; display: block; }
+  .step p { margin: 3px 0 0; font-size: 12.5px; }
+  .step pre { margin: 6px 0 0; padding: 8px 10px; background: var(--page); border: 1px solid var(--ring); font: 11.5px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-all; }
+  .step a { color: var(--s1); }
+  .mockonly { font-size: 11.5px; border-bottom: 1px dashed var(--axis); cursor: pointer; }
+
+  /* What flows where */
+  .arch { display: block; width: 100%; color: var(--ink2); margin-top: 6px; }
+  .arch text { font-size: 11px; fill: var(--ink); }
+  .arch .a-t { font-size: 11.5px; font-weight: 600; }
+  .arch .a-s { font-size: 10px; fill: var(--muted); }
+  .arch .a-org { fill: color-mix(in srgb, var(--s1) 18%, var(--surface)); stroke: var(--s1); stroke-width: 1.3; }
+  .arch .a-prover { fill: color-mix(in srgb, var(--crit) 8%, transparent); stroke: color-mix(in srgb, var(--crit) 65%, transparent); stroke-width: 1.2; }
+  .arch .a-node { fill: var(--s1); }
+  .arch .a-nt { fill: #fff; font-size: 11.5px; font-weight: 600; } .arch .a-ns { fill: #fff; font-size: 10px; }
+  .arch .a-box { fill: var(--surface); stroke: var(--axis); }
+  .arch .a-line { fill: none; stroke: currentColor; stroke-width: 1.3; }
+  .arch .a-line.dash { stroke-dasharray: 4 4; }
+  .arch .a-dots { fill: none; stroke: var(--s1); stroke-width: 3.2; stroke-linecap: round; stroke-dasharray: 0.1 15; animation: flow 1.2s linear infinite; }
+  .arch.paused .a-dots { animation-play-state: paused; }
+  @keyframes flow { to { stroke-dashoffset: -15.1; } }
+  .arch .a-gpu { fill: var(--axis); }
+  .arch.rawmode .a-later { opacity: .2; } .arch.rawmode .a-later .a-dots { display: none; }
+</style>
+</head>
+<body>
+<script src="/static/nav.js"></script>
+<div id="app"></div>
+<script src="/static/live.js"></script>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const mmss = s => { s = Math.max(0, Math.round(s)); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
+const dur = s => { s = Math.max(0, Math.round(s)); return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`; };
+
+// ---------------------------------------------------------------- recordings
+// index.json lists the recordings and the step-2 scenarios (with the real rules' verdicts); <id>.json holds one
+// recording's readings, once a second, as integers. Both are written by demo-classifier/make_replay_data.py.
+// <id>.hz10.json is the same recording ten times a second (the five GPU readings only, at the counters' own
+// polling rate). The last-minute strips draw it once it has arrived, and the 1 Hz file until then.
+// Everything else on the page (lanes, whole-clip view, rules, the network row) uses 1 Hz.
+const DATA = "/static/replay-data/", REC = {}, REC10 = {}, asked = {};
+let IDX = null;
+function need(W) { for (const n of W.nodes) if (n.rec) for (const [sfx, store] of [["", REC], [".hz10", REC10]])
+  if (!asked[n.rec + sfx]) { asked[n.rec + sfx] = 1; fetch(DATA + n.rec + sfx + ".json").then(r => r.json()).then(d => { store[n.rec] = d; paint(); }); } }
+const RULES = [["undeclared_load", "No busy GPU outside a declared job"],
+               ["training_shaped", "Inference jobs don't look like training"],
+               ["boundary_traffic", "Separate jobs don't send bulk data to each other"]];
+
+// Step 1: which recording plays is chosen with levers. A cell is one recorded combination: pick = the option chosen
+// in each lever, nodes = the recording on each node. A clip runs from the mark `at` (`before` seconds earlier) to the
+// mark `to` (`after` seconds later); with neither, it is the whole recording. index.json lists each recording's marks
+// (server_start, server_ready, warm_16, load_16, load_end_16, ...).
+// A serving clip is that concurrency's own run: the load generator's cache warm-up, then the 15 minutes of measured
+// load. Server loading and any other concurrency in the same recording are left out (no margins: 16 and 64 sit
+// 14 s apart in one recording, so a margin would show the neighbour).
+const TT = "TorchTitan, Llama 3 8B, one job on all 8 GPUs, sequence length 8,192", AX = n => `AgentX replaying recorded Claude Code sessions, ${n} at once`;
+const VL = "vLLM 0.33.0, DeepSeek V4.1 Flash";
+const KINDS = {
+  pre: { levers: [
+      { label: "Batch per GPU", opts: ["4", "1"] },
+      { label: "Activation checkpointing", opts: ["default", "middle"] }],
+    cells: [
+      { pick: [0, 0], nodes: [["node-a", "p1b"]], how: [["Workload", `${TT}, batch 4`], ["Checkpoint saves", "every 60 steps, 90 GB, about 35 s each; training waits"],
+          ["Measured", "about 2.8 s a step; a repeat of this run drew 558 W against 560 W per GPU"]] },
+      { pick: [1, 0], nodes: [["node-a", "p3"]], how: [["Workload", `${TT}, batch 1`], ["Checkpoint saves", "every 210 steps, 90 GB, about 35 s each; training waits"],
+          ["Measured", "about 0.8 s a step"]] },
+      { pick: [0, 1], nodes: [["node-a", "p2"]], how: [["Workload", `${TT}, batch 4`], ["Activation checkpointing", "recompute only the feed-forward's wide layer on the way back; half the memory (60 GiB against 115)"],
+          ["Checkpoint saves", "every 60 steps, 90 GB, about 35 s each"], ["Measured", "about 3.2 s a step"],
+          ["Caveat", "a package install ran on this node for 2 minutes of the recording"]] }] },
+  inf: { levers: [
+      { label: "Model", opts: ["DeepSeek V4.1 Flash", "MiniMax M3.1 Flash", "Qwen 3.8 Flash"] },
+      { label: "Layout", opts: ["tensor-parallel", "expert-parallel", "prefill and decode split, two nodes"] },
+      { label: "Concurrency", opts: ["4", "16", "64"] }],
+    cells: [
+      { pick: [0, 0, 1], nodes: [["node-a", "i1"]], at: "warm_16", before: 0, to: "load_end_16", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(16)], ["Measured", "660 tokens/s out"]] },
+      { pick: [0, 0, 2], nodes: [["node-a", "i1"]], at: "warm_64", before: 0, to: "load_end_64", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(64)], ["Measured", "1,802 tokens/s out"]] },
+      { pick: [0, 1, 1], nodes: [["node-a", "i2"]], at: "warm_16", before: 0, to: "load_end_16", after: 0, how: [["Server", `${VL}, <code>--data-parallel-size 8 --enable-expert-parallel</code> behind vllm-router`], ["Load", AX(16)], ["Measured", "652 tokens/s out"]] },
+      { pick: [0, 2, 1], nodes: [["node-a · prefill", "i3p"], ["node-b · decode", "i3d"]], at: "warm_16", before: 0, to: "load_end_16", after: 0,
+        how: [["Server", `${VL}, two servers: prefill on node-a, decode on node-b, cached context handed over the network (NixlConnector, 8 × 200 Gb/s Ethernet ports a node)`],
+              ["Load", AX(16) + ", through a proxy"], ["Measured", "662 tokens/s out; almost every prompt token reached the decode server by transfer"]] }] },
+};
+const RAW_NAMES = ["Pretraining", "Inference", "Both, side by side"], KIND = ["pre", "inf"];
+const BOTH = { nodes: [["node-a", "i1", "load_16"], ["node-b", "p1b", "train_start"]], before: 60, len: 600 };
+const nodeOf = ([name, rec], at, before) => ({ name, rec, gpus: IDX.recs[rec].gpus, off: at ? Math.max(0, IDX.recs[rec].mark[at] - before) : 0 });
+const cellOf = kind => KINDS[kind].cells.find(c => c.pick.every((v, i) => v === st.pick[kind][i]));
+let _rw = { key: "" };
+function rawWorld() {
+  const key = st.raw + "|" + JSON.stringify(st.pick);
+  if (_rw.key === key) return _rw.W;
+  const W = { raw: true, name: RAW_NAMES[st.raw], jobs: [], viol: [], extra: [] };
+  if (st.raw === 2) { W.nodes = BOTH.nodes.map(q => nodeOf(q, q[2], BOTH.before)); W.dur = BOTH.len; }
+  else { const c = cellOf(KIND[st.raw]); W.nodes = c.nodes.map(q => nodeOf(q, c.at, c.before)); W.cell = c;
+    W.dur = c.to ? Math.min(...W.nodes.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off)) : IDX.recs[c.nodes[0][1]].n; }
+  _rw = { key, W }; return W;
+}
+// "Add your GPUs" is still a mock-up: this world and fakeMetric() are the only made-up data left on the page.
+const LIVE = { id: "live", fake: true, name: "your box", dur: null, nodes: [{ name: "your-box", gpus: 8 }],
+  jobs: [{ id: 17, name: "serve", type: "inference", node: 0, g: [0, 7], start: 40, limit: 3600 }], extra: [], viol: [] };
+const noise = (k, t) => Math.sin(t * 0.9 + k * 1.7) * 0.5 + Math.sin(t * 0.23 + k * 0.6) * 0.3 + Math.sin(t * 2.7 + k * 3.1) * 0.2;
+function fakeMetric(n, g, t, key) {
+  const z = noise(n * 8 + g, t), load = noise(41, t * 0.3);
+  if (t < 40) return key === "power" ? 190 + 4 * z : 0;
+  return { power: Math.max(250, Math.min(590, 420 + 190 * load + 14 * z)), tensor: 1.7 + 0.5 * load + 0.2 * z, hbm_bw: 14 + 7 * load + 1.5 * z,
+           nvlink: 0.9 + 0.5 * load + 0.05 * z, pcie_tx: 0.012 * (1 + 0.2 * load), net_tx: 0 }[key];
+}
+const KEYS = ["power", "tensor", "hbm_bw", "nvlink", "pcie_tx", "net_tx"];   // net_tx is one row for the whole node
+// One reading: GPU g of node n, t seconds into the clip. Before the recording has loaded it reads as 0.
+// fine: read the 10 Hz file if it is loaded and holds this reading (the network row exists at 1 Hz only).
+function metric(W, n, g, t, key, fine) {
+  if (W.fake) return fakeMetric(n, g, t, key);
+  const nd = W.nodes[n], f = fine && REC10[nd.rec], r = f && f.s[key] ? f : REC[nd.rec]; if (!r) return 0;
+  const hz = r.hz || 1;
+  return (r.s[key][g] || r.s[key][0])[Math.max(0, Math.min(r.n * hz - 1, Math.floor((t + nd.off) * hz)))] / IDX.scale[key];
+}
+const gpuName = W => W.fake ? "B200" : IDX.recs[W.nodes[0].rec].gpu;
+// the power axis of the lanes: Blackwell cards reach 1 kW, Hopper cards 700 W
+const laneScale = W => /B[23]00/.test(gpuName(W)) ? { max: 1300, grid: 1000, label: "1 kW", busy: 300 } : { max: 800, grid: 500, label: "500 W", busy: 200 };
+// what the recording was doing t seconds into the clip, from its own marks and the trainer's log
+function phaseAt(W, t) {
+  if (W.fake) return "";
+  const names = W.nodes.map(n => { let s = ""; for (const [pt, name] of IDX.recs[n.rec].phases) if (pt <= t + n.off) s = name; return s; });
+  return names.every(q => q === names[0]) ? names[0] : W.nodes.map((n, i) => `${n.name.split(" ")[0]}: ${names[i]}`).join(" · ");
+}
+// a broken rule is a stretch [a, b): is it broken at `now`, and what did the rule say then
+const activeV = (v, now) => v.a <= now && now < v.b;
+const textV = (v, now) => { let s = v.d[0][1]; for (const [t, x] of v.d) if (t <= now) s = x; return s; };
+// Zoomed out: the whole clip at once, as about 400 points a line (each the mean of its stretch). Built once per world.
+let _zt = {};
+function teleWhole(W) {
+  const sig = W.nodes.map(n => n.rec + n.off + !!REC[n.rec]).join() + W.dur;
+  if (_zt.sig === sig) return _zt.out;
+  const out = {}, N = Math.min(400, W.dur), step = W.dur / N;
+  W.nodes.forEach((n, ni) => {
+    const h = { slot: ni, label: `${n.gpus} × ${gpuName(W)}`, replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} }, r = REC[n.rec];
+    for (const k of KEYS) { h.mean[k] = [];
+      for (let g = 0; g < n.gpus; g++) { (h.gpus[g] = h.gpus[g] || {})[k] = []; }
+      for (let i = 0; i <= N; i++) { let a = 0;
+        for (let g = 0; g < n.gpus; g++) { let v = 0, c = 0;
+          if (r) for (let j = Math.floor(n.off + Math.max(0, i - 1) * step), e = Math.max(j + 1, Math.floor(n.off + i * step)); j < e && j < r.n; j++) { v += (r.s[k][g] || r.s[k][0])[j]; c++; }
+          v = c ? v / c / IDX.scale[k] : 0; h.gpus[g][k].push([i * step, v]); a += v; }
+        h.mean[k].push([i * step, a / n.gpus]); } }
+    out[n.name] = h; });
+  _zt = { sig, out }; return out;
+}
+// the shape /api/live returns, so the real graphs (live.js) draw it: power at 2 Hz here, the rest at 1 Hz
+function teleData(list) {
+  const out = {}; let slot = 0;
+  for (const { W, t, live } of list) W.nodes.forEach((n, ni) => {
+    const h = { slot: slot++, label: `${n.gpus} × ${gpuName(W)}`, replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} };
+    for (const k of KEYS) h.mean[k] = [];
+    for (let g = 0; g < n.gpus; g++) { h.gpus[g] = {}; for (const k of KEYS) h.gpus[g][k] = []; }
+    const hz = !W.fake && REC10[n.rec] ? 10 : 1, t1 = Math.floor(t * hz) / hz;   // one point per stored reading, on its own time
+    for (let i = 60 * hz; i >= 0; i--) for (const k of KEYS) { const back = i / hz;
+      let a = 0; for (let g = 0; g < n.gpus; g++) { const v = metric(W, ni, g, t1 - back, k, hz > 1); h.gpus[g][k].push([t1 - back, v]); a += v; }
+      h.mean[k].push([t1 - back, a / n.gpus]);
+    }
+    out[n.name] = h;
+  });
+  return out;
+}
+// Five strips, all the same height. Tensor cores takes the place of "PCIe received" (no rule reads that one).
+const niceMax = v => { const m = Math.max(v, 1), e = 10 ** Math.floor(Math.log10(m)); return [1, 2, 5, 10].map(k => k * e).find(x => x >= m); };
+const mix = (a, b, t) => { const h = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)), A = h(a), B = h(b);
+  return `rgb(${A.map((v, i) => Math.round(v * t + B[i] * (1 - t))).join(",")})`; };
+const washOf = hex => mix(hex, css("--grid"), 0.35);   // opaque, so eight lines on top of each other stay as light as one
+const SH = 64, pct = v => v.toFixed(1) + " %", gbs = v => v.toFixed(2) + " GB/s";
+const MOCK_STRIPS = [
+  { key: "power", label: "Power", h: SH, max: m => m > 800 ? 1200 : 800, unit: "W", fmt: v => v.toFixed(0) + " W" },
+  { key: "tensor", label: "Tensor cores busy", h: SH, max: () => 100, unit: "%", fmt: pct },
+  { key: "hbm_bw", label: "HBM bandwidth used", h: SH, max: () => 100, unit: "%", fmt: pct },
+  { key: "nvlink", label: "NVLink traffic (tx + rx)", h: SH, max: niceMax, unit: "GB/s", fmt: gbs },
+  { key: "pcie_tx", label: "PCIe sent by GPU", h: SH, max: niceMax, unit: "GB/s", fmt: gbs },
+  { key: "net_tx", label: "Network sent to other nodes (whole node)", h: SH, max: niceMax, unit: "GB/s", fmt: v => v.toFixed(3) + " GB/s" },
+];
+MOCK_STRIPS.forEach(st => st.gpuColor = washOf);
+const TELE_OPTS = { compact: true, strips: MOCK_STRIPS, connectHref: "/debug#connect" };
+
+const TYPE = { inference: "#2a78d6", pretraining: "#3f8f5b" }, RED = "#d03b3b", NONE = "#888780";
+
+// ---------------------------------------------------------------- state
+// Settled so far: square panels, a Readings menu, and two steps (see the telemetry first, then check it).
+const st = { mode: "raw" /* raw = step 1 | check = step 2 */, raw: 0, pick: { pre: [0, 0], inf: [0, 0, 1] }, zoom: false, howOpen: false, sc: 1, now: 0, paused: false, speed: 12, hold: 0,
+             strips: new Set(["power", "tensor", "pcie_tx"]), menuOpen: false, box: "none", connectedAt: 0, src: "rec", addOpen: false };
+const isLive = () => st.box === "connected" && st.src === "live";
+const world = () => st.mode === "raw" ? rawWorld() : IDX.scenarios[st.sc];
+const cur = () => isLive() ? { W: LIVE, t: 200 + (Date.now() - st.connectedAt) / 1000, live: true } : { W: world(), t: st.now };
+
+// ---------------------------------------------------------------- pieces (HTML)
+const pane = (title, body, right = "", attrs = "") => `<section class="pane"${attrs}><h2>${title}<span class="grow"></span>${right}</h2><div class="pb">${body}</div></section>`;
+// Workload pills, then one row per lever. An option nobody has recorded is dimmed and cannot be chosen; one recorded
+// only in another combination is muted, and choosing it moves the other levers to the nearest recorded combination.
+function pillsRaw(on) {
+  const kind = KIND[st.raw], K = kind && KINDS[kind], W = rawWorld(), c = W.cell, r0 = IDX.recs[W.nodes[0].rec];
+  const clip = n => { const r = IDX.recs[n.rec]; return `${esc(n.name)}: ${mmss(n.off)} to ${mmss(n.off + W.dur)} of a ${Math.round(r.n / 60)}-minute recording, <code>${esc(r.run)}</code>`; };
+  const rows = [["Box", `${W.nodes.length > 1 ? "two nodes" : "one node"} of a two-node rental, 8 × ${esc(r0.gpu)} each, ${esc(r0.start_utc.slice(0, 10))}`],
+    ...(c ? c.how : [["Recordings", "made at different times on the two nodes of one rental, lined up here to start together"]]),
+    ["Clip", W.nodes.map(clip).join("<br>")], ["Readings", "last minute: 10 a second, the counters as polled and power as the mean of 2 polls. Whole clip, the lanes and the rules: 1-second means"]];
+  const menu = `<details class="menu" id="how"${st.howOpen ? " open" : ""}><summary>How it was recorded</summary><div class="how">
+      ${rows.map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("")}<span><a href="/walkthrough">Run it yourself →</a></span></div></details>`;
+  const has = (L, i, exact) => K.cells.some(q => q.pick[L] === i && (!exact || q.pick.every((v, j) => j === L || v === st.pick[kind][j])));
+  return `<div class="wl"><div class="pills">${RAW_NAMES.map((n, i) => `<button data-raw="${i}" class="${on && i === st.raw ? "on" : ""}">${esc(n)}</button>`).join("")}</div><span class="grow"></span>${menu}</div>` +
+    (K ? `<div class="levers">${K.levers.map((lv, L) => `<span class="ln">${esc(lv.label)}</span><div class="pills">${lv.opts.map((o, i) =>
+      `<button data-lev="${L}" data-i="${i}" class="${i === st.pick[kind][L] ? "on" : has(L, i, 1) ? "" : "far"}"${has(L, i) ? has(L, i, 1) ? "" : ` title="recorded in another combination; choosing it changes the other rows"` : ` disabled title="not recorded yet"`}>${esc(o)}</button>`).join("")}</div>`).join("")}</div>` : "");
+}
+function pickLever(L, i) {
+  const kind = KIND[st.raw], cur = st.pick[kind], score = q => q.pick.filter((v, j) => v === cur[j]).length;
+  const best = KINDS[kind].cells.filter(q => q.pick[L] === i).sort((a, b) => score(b) - score(a))[0];
+  if (best) { st.pick[kind] = [...best.pick]; st.now = 0; st.paused = false; render(); }
+}
+const KWORD = { caught: "Caught.", missed: "Missed.", "false alarm": "False alarm.", also: "Also:", holds: "" };
+const scNote = sc => `<p class="scnote"><b>${esc(sc.blurb)}</b> ` + sc.result.map(q => `<span class="k-${q.kind.split(" ")[0]}">${KWORD[q.kind]}</span> ${esc(q.text)}`).join(" ") + ` <span class="played">Playing: ${esc(sc.played)}.</span></p>`;
+const pillsSC = on => `<div class="pills">${IDX.scenarios.map((s, i) => `<button data-sc="${i}" class="${on && !isLive() && i === st.sc ? "on" : ""}">${esc(s.name)}</button>`).join("")}` +
+  (st.box === "connected" ? `<button data-src="live" class="${isLive() ? "on" : ""}"><span class="livedot"></span>your-box</button>` : "") + `</div>` + (isLive() ? "" : scNote(IDX.scenarios[st.sc]));
+const transport = () => isLive() ? "" : `<div class="transport"><button class="playbtn" id="play"></button><span class="time" id="ttime"></span>
+     <input type="range" id="scrub" min="0" max="${world().dur}" step="1">
+     <div class="seg sp">${[4, 12, 30].map(x => `<button data-x="${x}" class="${x === st.speed ? "on" : ""}">×${x}</button>`).join("")}</div></div><div class="phase" id="phase"></div>`;
+const ALL_R = [["power", "Power"], ["tensor", "Tensor cores busy"], ["hbm_bw", "HBM bandwidth"], ["nvlink", "NVLink traffic"], ["pcie_tx", "PCIe sent"], ["net_tx", "Network between nodes"]];
+const cb = ([k, n]) => `<label class="cb"><input type="checkbox" data-strip="${k}"${st.strips.has(k) ? " checked" : ""}>${n}</label>`;
+const zoomSeg = () => isLive() ? "" : `<div class="seg zm"><button data-zoom="0" class="${st.zoom ? "" : "on"}">Last minute</button><button data-zoom="1" class="${st.zoom ? "on" : ""}">Whole clip</button></div>`;
+const telePane = () => pane("Telemetry", `<div id="tele"></div>`, zoomSeg() + `<details class="menu"${st.menuOpen ? " open" : ""}><summary>Readings</summary><div>${ALL_R.map(cb).join("")}</div></details>`);
+function steps() {
+  const s3 = st.box === "connected"
+    ? `<b><span class="livedot"></span>your-box is streaming</b><p>mock-up: made-up readings · 8 × B200 · 1 Slurm job declared</p>
+       <p><button class="btn primary" data-act="watch">Watch it live</button> <button class="btn quiet" data-act="disconnect">Disconnect</button></p>`
+    : `<b><span class="pulse"></span>Listening for your box…</b><p>It appears here by itself once the collector starts.</p>
+       <p><span class="mockonly" data-act="connect">mock: pretend a box connects</span></p>`;
+  return `<div class="steps">
+    <div class="step"><span class="n">1</span><div><b>Rent a box with NVIDIA GPUs</b><p>Allow about an hour the first time; most of it is downloads.</p></div></div>
+    <div class="step"><span class="n">2</span><div><b>Run this on the box</b><pre>curl -fsSu :$P https://twc-verification-node.fly.dev/setup.py -o /tmp/setup.py &amp;&amp; python3 /tmp/setup.py</pre>
+      <p><a href="/walkthrough">Full walkthrough</a></p></div></div>
+    <div class="step"><span class="n">3</span><div>${s3}</div></div></div>`;
+}
+
+// What flows where, from the sketch. Parts that only matter once declarations exist carry class a-later,
+// so the first half (raw telemetry) can dim them.
+function archSVG(W) {
+  const two = W.nodes.length > 1, HH = two ? 350 : 310;
+  const gpus = (x0, y0) => W.nodes.map((n, ni) => { const y = y0 + ni * 40;
+    return `<text x="${x0}" y="${y - 5}" class="a-s">${esc(n.name)}</text>` +
+      Array.from({ length: n.gpus }, (_, g) => `<rect class="a-gpu" data-k="${ni}:${g}" x="${x0 + g * 14}" y="${y}" width="11" height="11"/>`).join(""); }).join("");
+  const flow = (d, dash) => `<path d="${d}" class="a-line${dash ? " dash" : ""}" marker-end="url(#a-arr)"/><path d="${d}" class="a-dots"/>`;
+  return `<svg id="arch" class="arch" viewBox="0 0 300 ${HH}"><defs><marker id="a-arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="currentColor" stroke-width="1.6"/></marker></defs>
+    <rect x="6" y="94" width="288" height="${HH - 100}" class="a-prover"/><text x="150" y="${HH - 14}" text-anchor="middle" class="a-s">Prover (neocloud / lab)</text>
+    <g class="a-later"><rect x="70" y="6" width="160" height="42" class="a-org"/><text x="150" y="24" text-anchor="middle" class="a-t">Verification organisation</text><text x="150" y="38" text-anchor="middle" class="a-s">govt / Averi / etc</text>
+      ${flow("M150 116 V52", true)}<text x="160" y="69">report</text><text x="160" y="83" style="font-size:10px" id="a-rep"></text></g>
+    <rect x="80" y="116" width="140" height="48" class="a-node"/><text x="150" y="136" text-anchor="middle" class="a-nt">Verification node</text><text x="150" y="151" text-anchor="middle" class="a-ns" id="a-node"></text>
+    ${flow("M112 230 V168")}<text x="104" y="196" text-anchor="end">telemetry</text><text x="104" y="209" text-anchor="end" class="a-s">power, counters</text>
+    <g class="a-later">${flow("M196 246 V168")}<text x="204" y="196">declarations</text><text x="204" y="209" class="a-s">job, type, GPUs</text>
+      <rect x="170" y="248" width="92" height="40" class="a-box"/><text x="216" y="266" text-anchor="middle">Slurm</text><text x="216" y="279" text-anchor="middle" class="a-s" id="a-jobs"></text></g>
+    ${gpus(22, 250)}</svg>`;
+}
+function paintArch(W, now) {
+  const root = $("#arch"); if (!root) return;
+  const bad = W.viol.filter(v => activeV(v, now)), badG = new Set(bad.flatMap(v => v.gpus)), warm = now < 30, nbad = new Set(bad.map(v => v.rule)).size;
+  root.querySelectorAll(".a-gpu").forEach(r => { const [n, g] = r.dataset.k.split(":").map(Number);
+    r.style.fill = badG.has(r.dataset.k) ? RED : metric(W, n, g, now, "power") > laneScale(W).busy ? css("--ink") : ""; });
+  root.classList.toggle("rawmode", !!W.raw); root.classList.toggle("paused", st.paused && !isLive());
+  $("#a-node").textContent = W.raw ? "collecting telemetry" : warm ? "warming up" : nbad ? `${nbad} of 3 rules broken` : "3 rules hold";
+  // the report: one broken rule per line, so three names fit beside the arrow
+  const rep = $("#a-rep"), lines = W.raw || warm ? ["nothing yet"] : nbad ? [...new Set(bad.map(v => v.rule))] : ["all rules hold"];
+  rep.innerHTML = lines.map((q, i) => `<tspan x="160" dy="${i ? 11 : 0}">${q}</tspan>`).join("");
+  rep.style.fill = W.raw || warm ? css("--muted") : bad.length ? RED : css("--good");
+  const nj = W.jobs.filter(j => j.start <= now).length; $("#a-jobs").textContent = `${nj} job${nj === 1 ? "" : "s"} declared`;
+}
+
+// ---------------------------------------------------------------- the page
+// Left column: the title, the two selectors (main choice above, its recordings below), the scrubber, then the three panes.
+// Right column: the diagram, by itself.
+function render() {
+  if (!IDX) { $("#app").innerHTML = `<p class="lede">Loading the recordings…</p>`; return; }
+  const live = isLive(), raw = st.mode === "raw" && !live, W = cur().W;
+  const note = raw ? `<span class="stepnote">step 2</span>` : "";
+  const cls = s => raw ? s.replace('class="pane"', 'class="pane later"') : s;
+  $("#app").innerHTML = `<div class="cols"><div>
+      <div class="head"><h1>Replay demo</h1><span class="grow"></span>${live ? `<span class="clock" id="clock"></span>` : ""}` +
+        (st.box === "connected" ? `<button class="btn quiet" data-act="disconnect">Disconnect your-box</button>` : `<button class="btn" data-act="add">＋ Add your GPUs</button>`) + `</div>
+      <div class="sel"><div class="pills big"><button data-mode="raw" class="${raw ? "on" : ""}">See the telemetry</button><button data-mode="check" class="${raw ? "" : "on"}">Check it against declarations</button></div>
+        ${raw ? pillsRaw(true) : pillsSC(true)}</div>
+      ${transport()}
+      ${st.addOpen ? pane("Add your own GPUs", steps(), `<button class="btn quiet" data-act="add">✕</button>`) : ""}
+      ${telePane()}
+      ${cls(pane("Declared workloads", `<div class="tl${live || raw ? " nolink" : ""}" id="tl"></div>`, note))}
+      ${cls(pane("Rules", `<div id="rules"></div>`, note))}
+    </div><aside class="side">${pane("What flows where", archSVG(W))}</aside></div>`;
+  bind(); paint();
+}
+function bind() {
+  const on = (sel, f, ev = "onclick") => document.querySelectorAll(sel).forEach(b => b[ev] = e => f(b, e));
+  on("[data-lev]", b => pickLever(+b.dataset.lev, +b.dataset.i));
+  on("[data-zoom]", b => setZoom(b.dataset.zoom === "1"));
+  const how = $("#how"); if (how) how.ontoggle = () => { st.howOpen = how.open; };
+  on("[data-raw]", b => { st.raw = +b.dataset.raw; st.mode = "raw"; st.src = "rec"; st.now = 0; st.paused = false; render(); });
+  on("[data-sc]", b => { st.sc = +b.dataset.sc; st.mode = "check"; st.src = "rec"; st.now = 0; st.paused = false; render(); });
+  on("[data-mode]", b => setMode(b.dataset.mode));
+  on("[data-src]", b => { st.src = b.dataset.src; st.mode = "check"; render(); });
+  on("[data-x]", b => { st.speed = +b.dataset.x; render(); });
+  on("[data-act]", b => act(b.dataset.act));
+  on("input[data-strip]", b => toggleStrip(b.dataset.strip), "onchange");
+  const menu = $("details.menu:not(#how)"); if (menu) menu.ontoggle = () => { st.menuOpen = menu.open; };
+  const play = $("#play"), scrub = $("#scrub"), tl = $("#tl");
+  if (play) play.onclick = () => { st.paused = !st.paused; paint(); };
+  if (scrub) scrub.oninput = () => { st.now = +scrub.value; paint(); };
+  if (tl && !tl.classList.contains("nolink")) tl.onclick = e => { const q = tl._geo; if (!q) return;
+    st.now = Math.max(0, Math.min(world().dur, (e.clientX - tl.getBoundingClientRect().left - q.L) / (q.R - q.L) * q.d1)); paint(); };
+}
+function setMode(m) { if (m === st.mode && !isLive()) return; st.mode = m; st.src = "rec"; st.now = 0; st.paused = false; render(); }
+function setZoom(z) { if (z !== st.zoom) { st.zoom = z; render(); } }
+function toggleStrip(k) { st.strips.has(k) ? st.strips.delete(k) : st.strips.add(k); render(); }
+function act(a) {
+  if (a === "add") st.addOpen = !st.addOpen;
+  else if (a === "connect") { st.box = "connected"; st.connectedAt = Date.now(); }
+  else if (a === "disconnect") { st.box = "none"; st.src = "rec"; }
+  else if (a === "watch") { st.src = "live"; st.mode = "check"; st.addOpen = false; }
+  render();
+}
+
+// ---------------------------------------------------------------- painting (runs 5× a second)
+function paintTele(el, list) {
+  if (!el) return;
+  const W = list[0].W, base = { compact: true, strips: MOCK_STRIPS.filter(q => st.strips.has(q.key)), connectHref: "/debug#connect" };
+  if (!st.zoom || list[0].live) return TWCLive.renderLive(el, teleData(list), base);
+  // zoomed out: the whole clip on the axis, a playhead at "now", a faint line wherever the first node's recording changes phase
+  const n0 = W.nodes[0], marks = IDX.recs[n0.rec].phases.map(q => W.dur - (q[0] - n0.off)).filter(a => a > 0 && a < W.dur);
+  TWCLive.renderLive(el, teleWhole(W), { ...base, span: W.dur, axis: ["00:00", mmss(W.dur)], cursorAgo: W.dur - st.now, marks, tipFmt: ago => "at " + mmss(W.dur - ago) });
+}
+
+// ---- Declared workloads: shared helpers
+const MONO = `font-family="ui-monospace, Menlo, monospace"`;
+function geo(el, W, now, L, pad) {
+  const Wd = el.clientWidth || 1000, R = Wd - pad, d1 = W.dur ? W.dur * 1.02 : Math.max(now * 1.12, now + 60);
+  el._geo = { L, R, d1 };
+  return { Wd, L, R, d1, x: t => L + Math.max(0, Math.min(t, d1)) / d1 * (R - L) };
+}
+const tickStep = d => d <= 900 ? 120 : d <= 2000 ? 300 : 600;   // seconds between time labels, so a whole hour-long recording stays readable
+const svg = (Wd, H, body) => `<svg viewBox="0 0 ${Wd} ${H}" style="height:${H}px">${body}</svg>`;
+function axis(g, W, now, PB, H) {
+  const { L, R, d1, x } = g, xn = x(now);
+  let s = `<line x1="${L}" y1="${PB + 4}" x2="${R}" y2="${PB + 4}" stroke="${css("--axis")}"/>
+    <line x1="${xn}" y1="0" x2="${xn}" y2="${PB + 4}" stroke="${RED}" stroke-width="1.2"/>
+    <text x="${xn}" y="${H - 5}" text-anchor="middle" font-size="11.5" font-weight="600" fill="${RED}">now ${W.dur ? mmss(now) : new Date().toTimeString().slice(0, 5)}</text>`;
+  if (W.dur) for (let t = 0; t <= d1; t += tickStep(d1)) { const xt = x(t); if (Math.abs(xt - xn) < 44) continue;
+    s += `<line x1="${xt}" y1="${PB + 4}" x2="${xt}" y2="${PB + 8}" stroke="${css("--axis")}"/><text x="${xt}" y="${H - 5}" text-anchor="${t ? "middle" : "start"}" font-size="11" fill="${css("--muted")}">${mmss(t)}</text>`; }
+  return s;
+}
+// One lane per group of GPUs, for every node that is streaming, whether or not anything is declared on it.
+// A node's GPUs are split wherever a job's GPU range starts or ends, so each lane is covered by whole jobs only.
+function lanesOf(W) {
+  return W.nodes.flatMap((n, ni) => {
+    const cuts = new Set([0, n.gpus]);
+    W.jobs.filter(j => j.node === ni).forEach(j => { cuts.add(j.g[0]); cuts.add(j.g[1] + 1); });
+    const c = [...cuts].sort((a, b) => a - b);
+    return c.slice(0, -1).map((a, i) => ({ node: ni, nodeName: n.name, g: [a, c[i + 1] - 1] }));
+  });
+}
+const when = (W, t, now) => W.dur ? mmss(t) : t <= now ? dur(now - t) + " ago" : "in " + dur(t - now);
+function showTip(el) {
+  const tip = el.querySelector(".jtip"), m = el._m; if (!tip) return;
+  const h = m && (el._hits || []).find(q => m.x >= q.x0 && m.x <= q.x1 && m.y >= q.y0 && m.y <= q.y1);
+  el._hover = h ? h.key : null;
+  if (!h) { tip.style.display = "none"; return; }
+  tip.innerHTML = h.html; tip.style.display = "block";
+  tip.style.left = Math.max(0, Math.min(m.x + 14, el.clientWidth - tip.offsetWidth - 4)) + "px"; tip.style.top = (m.y + 16) + "px";
+}
+
+// Declared workloads: shaded span = the declaration, lines = what each GPU's meter saw, red = a rule broken.
+function paintTL(el, W, now) {
+  if (!el) return;
+  if (!el._built) {   // the plot is redrawn 5× a second; the hover card lives beside it so it survives the redraw
+    el._built = 1; el.innerHTML = `<div class="plot"></div><div class="jtip"></div>`;
+    el.addEventListener("mousemove", e => { const r = el.getBoundingClientRect(); el._m = { x: e.clientX - r.left, y: e.clientY - r.top }; showTip(el); });
+    el.addEventListener("mouseleave", () => { el._m = null; showTip(el); });
+  }
+  const g = geo(el, W, now, 150, 40), { Wd, L, R, d1, x } = g, LANE = 56, GAP = 22, SCL = laneScale(W), YMAX = SCL.max, xn = x(now);
+  const lanes = lanesOf(W), hits = [], mid = {};
+  if (W.raw) {   // nothing declared in this recording: empty axes, no moving line, no "now" marker
+    let yy = 14, q = "";
+    for (const ln of lanes) { const yk = yy + LANE - SCL.grid / YMAX * LANE;
+      q += `<text x="0" y="${yy + LANE / 2 + 4}" font-size="12.5" fill="${css("--ink")}">${esc(ln.nodeName)} · GPU ${ln.g[0]}–${ln.g[1]}</text>
+            <line x1="${L}" y1="${yy + LANE}" x2="${R}" y2="${yy + LANE}" stroke="${css("--grid")}"/><line x1="${L}" y1="${yk}" x2="${R}" y2="${yk}" stroke="${css("--grid")}" stroke-dasharray="2 4"/>
+            <text x="${L - 6}" y="${yk + 3}" text-anchor="end" font-size="9.5" fill="${css("--muted")}">${SCL.label}</text><text x="${L - 6}" y="${yy + LANE}" text-anchor="end" font-size="9.5" fill="${css("--muted")}">0</text>`;
+      yy += LANE + GAP; }
+    const PB0 = yy - GAP, H0 = PB0 + 30;
+    q += `<line x1="${L}" y1="${PB0 + 4}" x2="${R}" y2="${PB0 + 4}" stroke="${css("--axis")}"/>`;
+    for (let t = 0; t <= d1; t += tickStep(d1)) q += `<line x1="${x(t)}" y1="${PB0 + 4}" x2="${x(t)}" y2="${PB0 + 8}" stroke="${css("--axis")}"/><text x="${x(t)}" y="${H0 - 5}" text-anchor="${t ? "middle" : "start"}" font-size="11" fill="${css("--muted")}">${mmss(t)}</text>`;
+    q += `<text x="${(L + R) / 2}" y="${(14 + PB0) / 2 + 5}" text-anchor="middle" font-size="14" fill="${css("--ink")}">not checked</text>`;
+    el._hits = []; el._geo = null; el.firstChild.innerHTML = svg(Wd, H0, q); showTip(el); return;
+  }
+  let y = 14, top = "", s = `<defs><pattern id="${el.id}-vh" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <line x1="0" y1="0" x2="0" y2="7" stroke="${RED}" stroke-opacity="0.5" stroke-width="1.2"/></pattern></defs>`;   // room above each lane for a broken rule's name
+  if (!lanes.length) { s += `<text x="${(L + R) / 2}" y="${y + 34}" text-anchor="middle" font-size="12" fill="${css("--muted")}">no node is streaming</text>`; y += LANE + GAP; }
+  for (const ln of lanes) {
+    const y0 = y, yv = w => y0 + LANE - Math.min(w, YMAX) / YMAX * LANE, inLane = k => { const [n, q] = k.split(":").map(Number); return n === ln.node && q >= ln.g[0] && q <= ln.g[1]; };
+    const jobs = W.jobs.filter(j => j.node === ln.node && j.g[0] <= ln.g[0] && j.g[1] >= ln.g[1] && j.start <= now);
+    const cur = jobs.find(j => now < j.limit), viol = W.viol.filter(v => v.a <= now && v.gpus.some(inLane)); let labelEnd = -1;
+    const where = `${esc(ln.nodeName)} · GPU ${ln.g[0]}–${ln.g[1]}`;
+    s += `<text x="0" y="${y0 + 27}" font-size="12.5" fill="${css("--ink")}">${where}</text>
+          <text x="0" y="${y0 + 43}" font-size="11" fill="${cur ? TYPE[cur.type] : viol.length ? RED : css("--muted")}">${cur ? "declared " + cur.type : "nothing declared"}</text>
+          <line x1="${L}" y1="${y0 + LANE}" x2="${R}" y2="${y0 + LANE}" stroke="${css("--grid")}"/>
+          <line x1="${L}" y1="${yv(SCL.grid)}" x2="${R}" y2="${yv(SCL.grid)}" stroke="${css("--grid")}" stroke-dasharray="2 4"/>
+          <text x="${L - 6}" y="${yv(SCL.grid) + 3}" text-anchor="end" font-size="9.5" fill="${css("--muted")}">${SCL.label}</text>
+          <text x="${L - 6}" y="${y0 + LANE}" text-anchor="end" font-size="9.5" fill="${css("--muted")}">0</text>`;
+    for (const j of jobs) {
+      const c = TYPE[j.type], a = x(j.start), b = x(j.limit), e = Math.min(xn, b), key = `${j.id}@${ln.g[0]}`, jv = viol.filter(v => !v.jobs.length || v.jobs.includes(j.id)), was = jv.filter(v => !activeV(v, now)).length;
+      s += `<rect x="${a}" y="${y0}" width="${Math.max(e - a, 1)}" height="${LANE}" fill="${c}" fill-opacity="0.12"/>
+            <rect x="${e}" y="${y0}" width="${Math.max(b - e, 0)}" height="${LANE}" fill="${c}" fill-opacity="0.05"/>
+            <line x1="${a}" y1="${y0}" x2="${e}" y2="${y0}" stroke="${c}" stroke-width="2"/>
+            <line x1="${e}" y1="${y0}" x2="${b}" y2="${y0}" stroke="${c}" stroke-width="1.2" stroke-dasharray="4 4"/>`;
+      if (el._hover === key) top += `<rect x="${a + .5}" y="${y0 + .5}" width="${Math.max(b - a - 1, 1)}" height="${LANE - 1}" fill="none" stroke="${c}" stroke-width="1.2"/>`;
+      hits.push({ key, x0: a, x1: b, y0, y1: y0 + LANE, html: `<b>Job ${j.id} · ${esc(j.name)}</b><br>
+        <span class="m">started ${when(W, j.start, now)} · time limit ${when(W, j.limit, now)}</span>` +
+        jv.filter(v => activeV(v, now)).map(v => `<br><span class="bad">${v.rule} broken for ${dur(now - v.a)}</span><br><span class="m">${esc(textV(v, now))}</span>`).join("") +
+        (was ? `<br><span class="m">a rule broke and held again ${was} time${was > 1 ? "s" : ""} before now</span>` : "") });
+    }
+    // measured power: a very light line for every GPU, and the lane's mean in dark on top
+    const ts = [], per = []; for (let k = ln.g[0]; k <= ln.g[1]; k++) per.push([]);
+    for (let t = 0; t <= now; t += d1 / 200) { ts.push(t); per.forEach((a, i) => a.push(metric(W, ln.node, ln.g[0] + i, t, "power"))); }
+    const mean = ts.map((_, i) => per.reduce((a, q) => a + q[i], 0) / per.length);
+    const poly = (vals, from, attrs) => { let q = ""; ts.forEach((t, i) => { if (t >= from) q += `${x(t).toFixed(1)},${yv(vals[i]).toFixed(1)} `; });
+      return `<polyline points="${q}" fill="none" stroke-linejoin="round" ${attrs}/>`; };
+    const last = cur || jobs[jobs.length - 1];
+    let lines = per.map(q => poly(q, 0, `stroke="${washOf(last ? TYPE[last.type] : NONE)}" stroke-width="1"`)).join("") + poly(mean, 0, `stroke="${css("--ink")}" stroke-width="1.5"`);
+    for (const v of viol) {
+      const va = x(v.a), ve = x(Math.min(now, v.b)), w = Math.max(ve - va, 2), mine = v.gpus.filter(inLane).map(k => +k.split(":")[1]), all = mine.length > ln.g[1] - ln.g[0];
+      // a broken rule: red wash plus diagonal hatch, so it does not read as one more declared span
+      s += `<rect x="${va}" y="${y0}" width="${w}" height="${LANE}" fill="${RED}" fill-opacity="0.12"/><rect x="${va}" y="${y0}" width="${w}" height="${LANE}" fill="url(#${el.id}-vh)"/>
+            <line x1="${va}" y1="${y0}" x2="${va + w}" y2="${y0}" stroke="${RED}" stroke-width="2"/>`;
+      // the rule's name above the stretch, unless it would run into the name before it (hover shows the details)
+      if (va > labelEnd) { const name = v.rule + (all ? "" : ` · GPU ${Math.min(...mine)}–${Math.max(...mine)}`);
+        s += `<text x="${va + 1}" y="${y0 - 4}" ${MONO} font-size="10" fill="${RED}">${name}</text>`; labelEnd = va + name.length * 6.2 + 8; }
+      if (!jobs.length) hits.unshift({ key: `${v.rule}@${ln.node}:${ln.g[0]}`, x0: va, x1: va + w, y0, y1: y0 + LANE,
+        html: `<b>No job on these GPUs</b><br>${where}<br><span class="bad">${v.rule} broken for ${dur(Math.min(now, v.b) - v.a)}</span><br><span class="m">${esc(textV(v, now))}</span>` });
+      if (v.jobs.length > 1 && activeV(v, now)) (mid[v.rule + v.a] = mid[v.rule + v.a] || []).push(y0 + LANE / 2);
+    }
+    s += lines;
+    y += LANE + GAP;
+  }
+  // right gutter: one line per broken boundary_traffic pair, a dot on each job it joins
+  Object.values(mid).filter(ys => ys.length > 1).forEach((ys, i) => { const gx = R + 16 + i * 14;
+    top += `<line x1="${gx}" y1="${Math.min(...ys)}" x2="${gx}" y2="${Math.max(...ys)}" stroke="${RED}" stroke-width="2"/>` + ys.map(yy => `<circle cx="${gx}" cy="${yy}" r="4.5" fill="${RED}"/>`).join(""); });
+  const PB = y - GAP, H = PB + 30;
+  el._hits = hits; el.firstChild.innerHTML = svg(Wd, H, s + axis(g, W, now, PB, H) + top); showTip(el);
+}
+function paintRules(el, W, now) {
+  if (!el) return;
+  el.innerHTML = RULES.map(([k, t]) => {
+    const act = W.viol.filter(q => q.rule === k && activeV(q, now)), v = act[0], past = W.viol.filter(q => q.rule === k && q.b <= now).length;
+    const r = W.raw ? { st: "wait", pill: "not checked", text: t } : now < 30 ? { st: "wait", pill: "warming up", text: "Needs 30 s of data first" }
+            : v ? { st: "bad", pill: `broken ${dur(now - v.a)}`, text: act.map(q => textV(q, now)).join(" · ") }
+            : { st: "ok", pill: "holding", text: t + (past ? ` (broke ${past} time${past > 1 ? "s" : ""} earlier in this clip)` : "") };
+    return `<div class="rule"><span class="dot" style="background:${css({ ok: "--good", bad: "--crit", wait: "--axis" }[r.st])}"></span><span class="rname">${k}</span>
+            <span class="rtext">${esc(r.text)}</span><span class="pill ${r.st}">${esc(r.pill)}</span></div>`;
+  }).join("");
+}
+function paint() {
+  if (!IDX) return;
+  const { W, t, live } = cur(), ph = $("#phase");
+  need(W); if (ph) ph.textContent = phaseAt(W, st.now);
+  const play = $("#play"), scrub = $("#scrub"), tt = $("#ttime"), clock = $("#clock");
+  if (play) play.textContent = st.paused ? "▶" : "❚❚";
+  if (scrub && document.activeElement !== scrub) scrub.value = st.now;
+  if (tt) tt.textContent = `${mmss(st.now)} / ${mmss(world().dur)}`;
+  if (clock) clock.textContent = new Date().toTimeString().slice(0, 8);
+  paintTele($("#tele"), [{ W, t, live }]); paintTL($("#tl"), W, t); paintRules($("#rules"), W, t); paintArch(W, t);
+}
+let last = performance.now();
+setInterval(() => {
+  const t = performance.now(), dt = (t - last) / 1000; last = t;
+  if (!st.paused && IDX) {
+    if (st.now >= world().dur) { st.hold += dt; if (st.hold > 3) { st.now = 0; st.hold = 0; } }
+    else st.now = Math.min(world().dur, st.now + dt * st.speed);
+  }
+  paint();
+}, 200);
+addEventListener("resize", paint);
+render();
+fetch(DATA + "index.json").then(r => r.json()).then(d => { d.scenarios.forEach(q => { q.extra = []; }); IDX = d; render(); });
+</script>
+</body>
+</html>

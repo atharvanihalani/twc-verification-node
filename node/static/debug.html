@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debug · TWC</title>
+<link rel="stylesheet" href="/static/base.css">
+<style>
+  /* Debug: a sidebar of sub-pages; "Live telemetry" is one of them. */
+  .layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 28px; }
+  .side a { display: block; padding: 5px 10px; border-radius: 6px; color: var(--ink2); text-decoration: none; font-size: 13.5px; }
+  .side a:hover { background: var(--grid); }
+  .side a.on { background: var(--grid); color: var(--ink); font-weight: 600; }
+  .pane > header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 16px; }
+  .pane { display: none; } .pane.on { display: block; }
+  .cmd { display: flex; gap: 10px; align-items: flex-start; }
+  .cmd pre { margin: 0; flex: 1; white-space: pre-wrap; word-break: break-all; }
+  .cmd button { font: inherit; font-size: 12.5px; padding: 4px 12px; border: 1px solid var(--ring); border-radius: 6px; background: var(--page); color: var(--ink); cursor: pointer; }
+  ul.plain { margin: 0; padding-left: 18px; } ul.plain li { margin: 3px 0; }
+  table.jobs { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.jobs th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 0 10px 6px 0; border-bottom: 1px solid var(--grid); }
+  table.jobs td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  table.jobs tr.gone td { opacity: .55; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; }
+  .pill.pretraining { background: #eaf3de; color: #27500a; } .pill.inference { background: #e6f1fb; color: #0c447c; }
+  .pill.other { background: var(--grid); color: var(--ink2); } .pill.none { background: #fcebeb; color: #791f1f; }
+  .pill.ok { background: #eaf3de; color: #27500a; } .pill.warn { background: #faeeda; color: #633806; }
+  .note { color: var(--muted); font-size: 12px; }
+  .edited { color: var(--crit); font-size: 12px; cursor: help; border-bottom: 1px dotted var(--crit); }
+  details.rawbox summary { cursor: pointer; color: var(--ink2); font-size: 13px; margin: 18px 0 8px; }
+</style>
+</head>
+<body>
+<script src="/static/nav.js"></script>
+<div class="layout">
+  <nav class="side">
+    <h3>Debug</h3>
+    <a href="#live">Live telemetry</a>
+    <a href="#slurm">Slurm jobs</a>
+    <a href="#raw">Raw data</a>
+    <a href="#connect">Connect a box</a>
+  </nav>
+  <main>
+    <section class="pane" id="p-live"><header><h1>Live telemetry</h1><span class="sub">raw NVML from collector.py · unsigned (v0)</span></header><div class="body"></div></section>
+    <section class="pane" id="p-slurm"><header><h1>Slurm jobs</h1><span class="sub">declarations from slurm_reporter.py · the operator's claims, as reported</span></header><div class="body"></div></section>
+    <section class="pane" id="p-raw"><header><h1>Raw data</h1><span class="sub">every field, as received</span></header><div class="body"></div></section>
+    <section class="pane" id="p-connect"><header><h1>Connect a box</h1><span class="sub">start streaming from any NVIDIA GPU machine</span></header>
+      <p>Run this <b>on the GPU box</b> (as root if you can). It asks for the site password once, downloads the collector from this node, and installs it so it keeps running.</p>
+      <div class="cmd card"><pre class="mono" id="oneliner"></pre><button data-copy="oneliner">Copy</button></div>
+      <p class="sub" id="tunnelnote" style="display:none">This page is running on <span class="mono">localhost</span>, which a remote box can't reach. Run <span class="mono">./tunnel.sh &lt;ssh-port&gt; &lt;user@box&gt;</span> on this Mac first, so the box's <span class="mono">127.0.0.1:18999</span> leads here.</p>
+      <details class="rawbox"><summary>Or: split one box into several pretend nodes <span class="note">(prototyping)</span></summary>
+      <p>Same thing, but it asks for a split like <span class="mono">4+4</span> or <span class="mono">2+2+4</span> (up to 4 parts, GPUs assigned in order). One collector process; each part shows up as its own node, <span class="mono">&lt;host&gt;-a</span>, <span class="mono">-b</span>…, with its GPUs numbered from 0. Running the normal command above turns the split off again.</p>
+      <div class="cmd card"><pre class="mono" id="oneliner-split"></pre><button data-copy="oneliner-split">Copy</button></div>
+      <p class="sub">Fine for pipeline checks, not evidence: the parts share one clock, one chassis and NVLink (real nodes talk over InfiniBand). See SPLIT_CAVEATS.md.</p>
+      </details>
+      <h3 style="margin-top:22px">Connect a scheduler (Slurm)</h3>
+      <p>Run this <b>once per cluster</b>, wherever <span class="mono">sbatch</span> works (the controller or a login node). It doesn't need GPUs. Every 5 s it reads Slurm's job table (<span class="mono">scontrol show job</span>, read-only) and sends it here; jobs then appear under <a href="#slurm">Slurm jobs</a>. Declare a job with <span class="mono">sbatch --comment=declared:pretraining</span> (or <span class="mono">inference</span>). No Slurm on the machine? It offers to install a one-box Slurm for testing (needs root + apt).</p>
+      <div class="cmd card"><pre class="mono" id="oneliner-slurm"></pre><button data-copy="oneliner-slurm">Copy</button></div>
+      <p class="sub">Afterwards: <span class="mono">python3 ~/.twc-slurm-reporter/slurm_reporter.py status</span> (or <span class="mono">once</span> to print what it would send, or <span class="mono">uninstall</span>).</p>
+      <h3 style="margin-top:22px">What install does</h3>
+      <ul class="plain">
+        <li>Copies itself to <span class="mono">~/.twc-collector/</span> and saves the settings there (owner-only, since they hold the password).</li>
+        <li>Installs <span class="mono">nvidia-ml-py</span> if it's missing, in a private venv.</li>
+        <li>Keeps it running with whatever this machine has: <b>systemd</b> (normal Linux machines, needs root), else <b>supervisor</b> (e.g. vast images), else a background restart loop plus a cron <span class="mono">@reboot</span> entry.</li>
+      </ul>
+      <h3 style="margin-top:22px">On the box afterwards</h3>
+      <pre class="raw mono">python3 ~/.twc-collector/collector.py status      # running? last log lines
+python3 ~/.twc-collector/collector.py uninstall   # stop and remove</pre>
+      <p class="sub">The box appears under Live telemetry within a few seconds, named after its hostname (add <span class="mono">--host NAME</span> to choose).</p>
+    </section>
+  </main>
+</div>
+<script src="/static/live.js"></script>
+<script>
+  let tab = "live", last = null;
+  const R = { live: TWCLive.renderLive, slurm: el => renderSlurm(el), raw: TWCLive.renderRaw, connect: () => {} };
+  // the one-liner: on Fly the box talks to this site directly; on localhost it goes through tunnel.sh
+  const local = ["localhost", "127.0.0.1"].includes(location.hostname);
+  const fetchUrl = local ? "http://127.0.0.1:18999" : location.origin;
+  // A wrong password gets a redirect with an empty body, which curl saves without complaint; hence the -s check.
+  const fetchAndRun = (file, args) => `read -rsp "TWC password: " P; echo; curl -fsSu ":$P" ${fetchUrl}/${file} -o /tmp/${file} && if [ -s /tmp/${file} ]; then TWC_PASSWORD="$P" python3 /tmp/${file} ${args}; else echo "Couldn't download ${file}: wrong password?"; fi`;
+  const installArgs = `install --node ${fetchUrl}`;
+  document.getElementById("oneliner").textContent = fetchAndRun("collector.py", installArgs);
+  document.getElementById("oneliner-split").textContent = fetchAndRun("collector.py", installArgs + " --split ask");
+  document.getElementById("oneliner-slurm").textContent = fetchAndRun("slurm_reporter.py", installArgs);
+  document.getElementById("tunnelnote").style.display = local ? "block" : "none";
+  document.querySelectorAll("[data-copy]").forEach(b => b.onclick = e => { navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent); e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy", 1200); });
+  // ---- Slurm jobs: the declarations, straight from /api/slurm (polled with the live data, 1 s)
+  const esc = x => String(x ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const hms = t => t ? new Date(t * 1000).toLocaleTimeString([], { hour12: false }) : "";
+  const ago = s => s < 90 ? `${Math.round(s)} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${(s / 3600).toFixed(1)} h ago`;
+  const dur = s => s == null ? "" : s < 90 ? `${Math.round(s)} s` : s >= 3600 ? `${Math.floor(s / 3600)}h${String(Math.round(s % 3600 / 60)).padStart(2, "0")}` : `${Math.round(s / 60)} min`;
+  function ranges(a) {   // [0,1,2,3,6] -> "0–3, 6"
+    const out = []; let i = 0; a = [...a].sort((x, y) => x - y);
+    while (i < a.length) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; out.push(j > i ? `${a[i]}–${a[j]}` : `${a[i]}`); i = j + 1; }
+    return out.join(", ");
+  }
+  function gpuCell(j) {
+    const gl = j.gpu_list || [];
+    if (!gl.length) return j.state === "PENDING" ? `<span class="note">wants ${j.gpus_requested || 0}</span>` : `<span class="note">${j.gpus_requested ? "none recorded" : "no GPUs"}</span>`;
+    const byNode = {}; gl.forEach(g => (byNode[g.node] = byNode[g.node] || []).push(g.idx));
+    const where = Object.entries(byNode).map(([n, ix]) => `<span class="mono">${esc(n)}</span>: ${ranges(ix)}`).join("<br>");
+    if (j.gpus_from_earlier || j.gone_at || !["RUNNING", "COMPLETING", "SUSPENDED"].includes(j.state)) return `${where}<br><span class="note">held these</span>`;
+    const hosts = [...new Set(gl.filter(g => g.host).map(g => g.host))];
+    const ok = j.streaming === gl.length;
+    const tip = gl.map(g => `${g.node} gres ${g.idx} → ${g.host ? `${g.host} GPU ${g.gpu} (${g.uuid}, matched by ${g.by})` : "no streaming GPU"}`).join("\n");
+    return `${where}<br><span class="pill ${ok ? "ok" : "warn"}" title="${esc(tip)}">${j.streaming}/${gl.length} streaming</span>` +
+           (hosts.length ? ` <span class="note">${hosts.map(esc).join(", ")}</span>` : "");
+  }
+  function declCell(j) {
+    const t = j.declared;
+    const pill = t ? `<span class="pill ${["pretraining", "inference"].includes(t) ? t : "other"}">${esc(t)}</span>` : `<span class="pill none">not declared</span>`;
+    const h = j.history || [];
+    const ed = h.length > 1 ? ` <span class="edited" title="${esc(h.map(v => `${hms(v.t)}  ${v.comment || "(no comment)"}`).join("\n"))}">edited ×${h.length - 1}</span>` : "";
+    const extra = j.comment && j.comment !== `declared:${t}` ? `<br><span class="note mono">${esc(j.comment)}</span>` : "";
+    return pill + ed + extra;
+  }
+  function timesCells(j) {
+    const sub = `${hms(j.submit)}<br><span class="note">seen ${j.submit ? `+${Math.max(0, Math.round(j.first_seen - j.submit))} s` : hms(j.first_seen)}</span>`;
+    let start = "—";
+    if (j.start && !j.start_is_estimate) start = hms(j.start);
+    else if (j.start) start = `<span class="note">est. ${hms(j.start)}</span>`;
+    let end = "—";
+    const done = !["PENDING", "RUNNING", "COMPLETING", "SUSPENDED", "CONFIGURING"].includes(j.state);
+    if (done && j.end) end = hms(j.end) + (j.run_time_s != null ? `<br><span class="note">ran ${dur(j.run_time_s)}</span>` : "");
+    else if (j.time_limit_s != null) end = `<span class="note">limit ${dur(j.time_limit_s)}${j.start && !j.start_is_estimate ? ` → ${hms(j.start + j.time_limit_s)}` : ""}</span>`;
+    return `<td>${sub}</td><td>${start}</td><td>${end}</td>`;
+  }
+  let slurmRawOpen = localStorage.getItem("twc-slurm-raw") === "1";
+  async function renderSlurm(el) {
+    let d; try { d = await (await fetch("/api/slurm")).json(); } catch (e) { return; }
+    if (!d.clusters.length) {
+      el.innerHTML = `<p class="empty">No Slurm reporter has connected yet. Install one from <a href="#connect">Connect a box</a> → Connect a scheduler.</p>`;
+      return;
+    }
+    if (!el.querySelector(".cl")) el.innerHTML = "";
+    d.clusters.forEach((c, k) => {
+      let box = el.querySelector(`.cl[data-k="${k}"]`);
+      if (!box) {
+        box = document.createElement("div"); box.className = "cl"; box.dataset.k = k;
+        box.innerHTML = `<div class="card st" style="margin-bottom:14px"></div><div class="tbl"></div>
+          <details class="rawbox"><summary></summary><pre class="raw mono"></pre></details>`;
+        const det = box.querySelector("details"); det.open = slurmRawOpen;
+        det.addEventListener("toggle", () => { slurmRawOpen = det.open; localStorage.setItem("twc-slurm-raw", det.open ? "1" : "0"); });
+        el.appendChild(box);
+      }
+      const late = c.age_s > 3 * (c.poll_s || 5);
+      box.querySelector(".st").innerHTML = `<span class="dot" style="background:var(--${late ? "crit" : "good"})"></span>` +
+        `cluster <b>${esc(c.cluster)}</b> · reporter on <span class="mono">${esc(c.reporter_host)}</span> · ` +
+        `<span style="color:var(--${late ? "crit" : "ink2"})">last report ${ago(c.age_s)}</span> · report #${c.seq}` +
+        (c.missed ? ` · <span style="color:var(--crit)">${c.missed} missed</span>` : "") +
+        (c.error ? `<br><span style="color:var(--crit)">scontrol failed: ${esc(c.error)}</span>` : "") +
+        `<span class="note"> · ${esc(c.reporter)}</span>`;
+      const rows = c.jobs.map(j => `<tr class="${j.gone_at ? "gone" : ""}">
+          <td class="mono">${esc(j.id)}</td>
+          <td>${esc(j.name)}<br><span class="note">${esc(j.user)} · ${esc(j.partition)}</span></td>
+          <td>${declCell(j)}</td>
+          <td>${esc((j.state || "").toLowerCase())}${j.state === "PENDING" && j.reason ? `<br><span class="note">${esc(j.reason)}</span>` : ""}${j.gone_at ? `<br><span class="note">left Slurm's table</span>` : ""}</td>
+          <td>${gpuCell(j)}</td>${timesCells(j)}</tr>`).join("");
+      box.querySelector(".tbl").innerHTML = c.jobs.length
+        ? `<table class="jobs"><thead><tr><th>Job</th><th>Name</th><th>Declared</th><th>State</th><th>GPUs</th><th>Submitted</th><th>Started</th><th>Ends</th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<p class="empty">Slurm's job table is empty (the reporter is still sending: that's the heartbeat).</p>`;
+      box.querySelector("summary").innerHTML = `scontrol output as reported <span class="note">· unedited · received ${hms(c.received_at)}</span>`;
+      const pre = box.querySelector("pre");
+      if (pre.textContent !== c.raw) pre.textContent = c.raw || "(no jobs)";
+    });
+  }
+  function show() {
+    tab = (location.hash || "#live").slice(1); if (!R[tab]) tab = "live";
+    document.querySelectorAll(".side a[href^='#']").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + tab));
+    document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "p-" + tab));
+    if (last) R[tab](document.querySelector(`#p-${tab} .body`), last);
+  }
+  addEventListener("hashchange", show); show();
+  TWCLive.subscribe(d => { last = d; R[tab](document.querySelector(`#p-${tab} .body`), d); });
+</script>
+</body>
+</html>
