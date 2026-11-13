@@ -50,7 +50,7 @@ For each streaming GPU that no counted job was given: if its mean power is over 
 
 ## Rule 2: a job declared inference does not look like training
 
-A job declared `inference` breaks the rule if its value for tensor-core utilisation exists and is over **45%**.
+A job declared `inference` breaks the rule if its value for tensor-core utilisation exists and is over **40%**.
 
 (Until 2026-11-11 a second test, "power spread", could also break this rule. It was removed: it fired on honest serving under a steady load.)
 
@@ -83,6 +83,8 @@ The page shows periods, not single evaluations. Each broken rule has a subject: 
 ## What the rules do not do
 
 - Nothing checks that a job declared `pretraining` is really training.
-- Only power, tensor-core utilisation and PCIe sent are read.
-- Flag 2 of rule 2 is also raised by honest serving under a heavy, steady load.
+- Only power, tensor-core utilisation and network sent are read. PCIe sent is still collected, but nothing reads it while rule 3's PCIe test is off.
+- Rule 3 judges only boxes whose collector reports network readings. The live collector does not send them yet, so today it judges recordings only.
+- A split inside one box (its traffic goes over NVLink or PCIe, not the network ports) is not seen by rule 3 while the PCIe test is off.
+- Training that keeps its power under the busy floor (an FSDP run drew about 187 W) is not busy, so rule 1 does not see it.
 - One patchy GPU reduces coverage for every GPU, because a slot is kept only when all of them have a reading.

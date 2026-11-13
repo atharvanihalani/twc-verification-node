@@ -36,7 +36,7 @@ def spec(power, readings, decls, gpus, t_end, models):
             if len(v) >= 15 and sum(v) / len(v) > 0.001: hits.add(("boundary_traffic", d["job_id"]))
                                                                               # rule 2
         busy = value("tensor_util", gs)
-        if busy is not None and busy > 45:
+        if busy is not None and busy > 40:
             hits.add(("training_shaped", d["job_id"]))
     for i in range(0):                                                        # rule 3, test 2: switched off (rules.md); range(len(jobs)) when on
         for j in range(i + 1, len(jobs)):
@@ -55,7 +55,7 @@ for case in range(N):
     jobA, jobB = order[:cut], order[cut:]
     for grp in (jobA, jobB):
         level = random.choice([90, 199, 201, 299, 301, 399, 401, 499, 501, 650]); swing = random.choice([0, 45, 55, 150]); period = random.choice([200, 300, 450])
-        base = random.choice([0.0, 0.15, 0.34, 0.36, 0.45, 1.2]); busy = random.choice([3, 30, 44.5, 45.5, 70]); nread = random.choice([10, 14, 15, 30, 64])
+        base = random.choice([0.0, 0.15, 0.34, 0.36, 0.45, 1.2]); busy = random.choice([3, 30, 39.5, 40.5, 70]); nread = random.choice([10, 14, 15, 30, 64])
         for g in grp:
             power[g] = [(t_end - dur + k * 0.1 + random.uniform(-0.03, 0.03), level + swing * math.sin(6.2832 * k / period) + random.gauss(0, 30))
                         for k in range(int(dur * 10) + 3) if random.random() > drop]

@@ -156,11 +156,34 @@
 
   /* rules */
   .rule { display: grid; grid-template-columns: 14px 180px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--grid); }
-  .rule:first-of-type { padding-top: 2px; } .rule:last-of-type { border-bottom: 0; padding-bottom: 0; }
+  .ritem:first-child .rule { padding-top: 2px; } .ritem:last-child:not(.open) .rule { border-bottom: 0; padding-bottom: 0; }
   .rule .dot { width: 9px; height: 9px; border-radius: 50%; margin: 0; }
   .rname { font: 13px ui-monospace, Menlo, monospace; }
   .rtext { font-size: 13.5px; }
   .rule .pill { font-size: 12px; padding: 1px 9px; border-radius: 0; white-space: nowrap; }
+  /* a rule opens (his design, 2026-11-12): Rule = one question, Why = two lines, Right now = per node; then one small
+     graph of each node's reading over the clip so far against the dashed limit, the last 60 s shaded */
+  .rule { grid-template-columns: 14px 180px minmax(0, 1fr) auto 12px; cursor: pointer; }
+  .rule .rcar { color: var(--muted); font-size: 9px; transition: transform .15s; }
+  .ritem.open .rule { border-bottom: 0; }
+  .ritem.open .rcar { transform: rotate(90deg); }
+  .rdet { padding: 0 0 12px 26px; border-bottom: 1px solid var(--grid); }
+  .ritem:last-child .rdet { border-bottom: 0; }
+  .rspec { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 6px 14px; font-size: 13.5px; line-height: 1.45; }
+  .rspec .rl { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+  .rspec .rq { font-weight: 600; } .rspec .rm { color: var(--muted); } .rspec .rw { color: var(--ink2); }
+  .rnow { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .rnow .nd { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .rnow .v { font: 12.5px ui-monospace, Menlo, monospace; } .rnow .over { color: var(--crit); }
+  .rnow .off { color: var(--muted); }
+  /* "A note on rules": light text under the Rules pane, closed by default */
+  details.rnote { margin: -4px 0 14px 12px; font-size: 12.5px; color: var(--muted); max-width: 640px; }
+  details.rnote summary { cursor: pointer; list-style: none; } details.rnote summary::-webkit-details-marker { display: none; }
+  details.rnote summary::after { content: " ▾"; font-size: 10px; } details.rnote[open] summary::after { content: " ▴"; }
+  details.rnote summary:hover { color: var(--ink2); }
+  details.rnote p { margin: 6px 0 0; line-height: 1.5; }
+  svg.rg { display: block; width: 100%; height: 66px; margin-top: 10px; overflow: visible; }
+  svg.rg text { font: 10px ui-monospace, Menlo, monospace; fill: var(--muted); }
   .pill.ok { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good); }
   .pill.bad { background: color-mix(in srgb, var(--crit) 14%, transparent); color: var(--crit); }
   .pill.wait { background: var(--grid); color: var(--ink2); }
@@ -238,11 +261,11 @@ const KINDS = {
       { label: "Batch per GPU", opts: ["4", "1"] },
       { label: "Activation checkpointing", opts: ["default", "middle"] }],
     cells: [
-      { pick: [0, 0], nodes: [["node-a", "p1b"]], how: [["Workload", `${TT}, batch 4`], ["Checkpoint saves", "every 60 steps, 90 GB, about 35 s each; training waits"],
+      { pick: [0, 0], nodes: [["node-a", "p1b"]], at: "train_start", before: 30, how: [["Workload", `${TT}, batch 4`], ["Checkpoint saves", "every 60 steps, 90 GB, about 35 s each; training waits"],
           ["Measured", "about 2.8 s a step; a repeat of this run drew 558 W against 560 W per GPU"]] },
-      { pick: [1, 0], nodes: [["node-a", "p3"]], how: [["Workload", `${TT}, batch 1`], ["Checkpoint saves", "every 210 steps, 90 GB, about 35 s each; training waits"],
+      { pick: [1, 0], nodes: [["node-a", "p3"]], at: "train_start", before: 30, how: [["Workload", `${TT}, batch 1`], ["Checkpoint saves", "every 210 steps, 90 GB, about 35 s each; training waits"],
           ["Measured", "about 0.8 s a step"]] },
-      { pick: [0, 1], nodes: [["node-a", "p2"]], how: [["Workload", `${TT}, batch 4`], ["Activation checkpointing", "recompute only the feed-forward's wide layer on the way back; half the memory (60 GiB against 115)"],
+      { pick: [0, 1], nodes: [["node-a", "p2"]], at: "train_start", before: 30, how: [["Workload", `${TT}, batch 4`], ["Activation checkpointing", "recompute only the feed-forward's wide layer on the way back; half the memory (60 GiB against 115)"],
           ["Checkpoint saves", "every 60 steps, 90 GB, about 35 s each"], ["Measured", "about 3.2 s a step"],
           ["Caveat", "a package install ran on this node for 2 minutes of the recording"]] }] },
   inf: { levers: [
@@ -259,11 +282,11 @@ const KINDS = {
 };
 const RAW_NAMES = ["Pretraining", "Inference", "Side by side"], KIND = ["pre", "inf"];
 // Side by side: any recordings, one row each (st.side), up to SIDE_MAX nodes in all (the split takes two). Clips are
-// lined up to start together and the shortest sets the length. A pretraining clip starts 60 s before training does.
+// lined up to start together and the shortest sets the length. A pretraining clip starts 30 s before training does.
 const SIDE_MAX = 4, LETTERS = "abcdefgh", KTITLE = { pre: "Pretraining", inf: "Inference" };
 const SHOW = { pre: [v => `batch ${v}`, v => `${v} checkpointing`], inf: [v => v, v => v.replace("prefill and decode split, two nodes", "prefill/decode split"), v => `${v} sessions`] };   // how a choice reads in the row
 const sideCell = s => KINDS[s.k].cells.find(c => c.pick.every((v, i) => v === s.pick[i]));
-const clipOf = c => c.at ? c : { ...c, at: "train_start", before: 60, to: "train_stop", after: 0 };
+const clipOf = c => c.to ? c : { ...c, at: "train_start", before: 30, to: "train_stop", after: 0 };
 const sideNodes = side => side.reduce((n, s) => n + sideCell(s).nodes.length, 0);
 function nearest(k, pick, L, i) {   // the recorded combination with lever L = i that keeps most of the other choices
   const score = q => q.pick.filter((v, j) => v === pick[j]).length;
@@ -282,7 +305,7 @@ function rawWorld() {
       W.nodes.push(...ns); durs.push(Math.min(...ns.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off))); }
     W.dur = Math.min(...durs); }
   else { const c = cellOf(KIND[st.raw]); W.nodes = c.nodes.map(q => nodeOf(q, c.at, c.before)); W.cell = c;
-    W.dur = c.to ? Math.min(...W.nodes.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off)) : IDX.recs[c.nodes[0][1]].n; }
+    W.dur = c.to ? Math.min(...W.nodes.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off)) : IDX.recs[c.nodes[0][1]].n - W.nodes[0].off; }
   _rw = { key, W }; return W;
 }
 // "Add your GPUs" is still a mock-up: this world and fakeMetric() are the only made-up data left on the page.
@@ -359,7 +382,7 @@ function teleData(list) {
   });
   return out;
 }
-// Five strips, all the same height. Tensor cores takes the place of "PCIe received" (no rule reads that one).
+// The strips, all the same height. PCIe sent was dropped 2026-11-12 (rule 3's PCIe test is off); the data still loads.
 const niceMax = v => { const m = Math.max(v, 1), e = 10 ** Math.floor(Math.log10(m)); return [1, 2, 5, 10].map(k => k * e).find(x => x >= m); };
 const mix = (a, b, t) => { const h = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)), A = h(a), B = h(b);
   return `rgb(${A.map((v, i) => Math.round(v * t + B[i] * (1 - t))).join(",")})`; };
@@ -367,10 +390,9 @@ const washOf = hex => mix(hex, css("--grid"), 0.35);   // opaque, so eight lines
 const SH = 64, pct = v => v.toFixed(1) + " %", gbs = v => v.toFixed(2) + " GB/s";
 const MOCK_STRIPS = [
   { key: "power", label: "Power", h: SH, max: m => m > 800 ? 1200 : 800, unit: "W", fmt: v => v.toFixed(0) + " W" },
-  { key: "tensor", label: "Tensor cores busy", h: SH, max: () => 100, unit: "%", fmt: pct },
   { key: "hbm_bw", label: "HBM bandwidth used", h: SH, max: () => 100, unit: "%", fmt: pct },
   { key: "nvlink", label: "NVLink traffic (tx + rx)", h: SH, max: niceMax, unit: "GB/s", fmt: gbs },
-  { key: "pcie_tx", label: "PCIe sent by GPU", h: SH, max: niceMax, unit: "GB/s", fmt: gbs },
+  { key: "tensor", label: "Tensor cores busy", h: SH, max: () => 100, unit: "%", fmt: pct },
   { key: "net_tx", label: "Network sent to other nodes (whole node)", h: SH, max: niceMax, unit: "GB/s", fmt: v => v.toFixed(3) + " GB/s" },
 ];
 MOCK_STRIPS.forEach(st => st.gpuColor = washOf);
@@ -381,8 +403,8 @@ const TYPE = { inference: "#2a78d6", pretraining: "#3f8f5b" }, RED = "#d03b3b", 
 // ---------------------------------------------------------------- state
 // Settled so far: square panels, a Readings menu, and two steps (see the telemetry first, then check it).
 const st = { mode: "raw" /* raw = step 1 | check = step 2 */, raw: 0, pick: { pre: [0, 0], inf: [0, 0, 1] },
-             side: [{ k: "inf", pick: [0, 0, 1] }, { k: "pre", pick: [0, 0] }], seg: null /* open menu in Side by side: "row:level" */, zoom: false, howOpen: false, sc: 1, now: 0, paused: false, speed: 12, hold: 0,
-             strips: new Set(["power", "tensor", "pcie_tx"]), menuOpen: false, box: "none", connectedAt: 0, src: "rec", addOpen: false };
+             side: [{ k: "inf", pick: [0, 0, 1] }, { k: "pre", pick: [0, 0] }], ruleOpen: new Set(), noteOpen: false, seg: null /* open menu in Side by side: "row:level" */, zoom: false, howOpen: false, sc: 1, now: 0, paused: false, speed: 12, hold: 0,
+             strips: new Set(["power", "hbm_bw", "nvlink"]), menuOpen: false, box: "none", connectedAt: 0, src: "rec", addOpen: false };
 const isLive = () => st.box === "connected" && st.src === "live";
 const world = () => st.mode === "raw" ? rawWorld() : IDX.scenarios[st.sc];
 const cur = () => isLive() ? { W: LIVE, t: 200 + (Date.now() - st.connectedAt) / 1000, live: true } : { W: world(), t: st.now };
@@ -436,7 +458,7 @@ const pillsSC = on => `<div class="pills">${IDX.scenarios.map((s, i) => `<button
 const transport = () => isLive() ? "" : `<div class="transport"><button class="playbtn" id="play"></button><span class="time" id="ttime"></span>
      <input type="range" id="scrub" min="0" max="${world().dur}" step="1">
      <div class="seg sp">${[4, 12, 30].map(x => `<button data-x="${x}" class="${x === st.speed ? "on" : ""}">×${x}</button>`).join("")}</div></div><div class="phase" id="phase"></div>`;
-const ALL_R = [["power", "Power"], ["tensor", "Tensor cores busy"], ["hbm_bw", "HBM bandwidth"], ["nvlink", "NVLink traffic"], ["pcie_tx", "PCIe sent"], ["net_tx", "Network between nodes"]];
+const ALL_R = [["power", "Power"], ["hbm_bw", "HBM bandwidth"], ["nvlink", "NVLink traffic"], ["tensor", "Tensor cores busy"], ["net_tx", "Network between nodes"]];
 const cb = ([k, n]) => `<label class="cb"><input type="checkbox" data-strip="${k}"${st.strips.has(k) ? " checked" : ""}>${n}</label>`;
 const zoomSeg = () => isLive() ? "" : `<div class="seg zm"><button data-zoom="0" class="${st.zoom ? "" : "on"}">Last minute</button><button data-zoom="1" class="${st.zoom ? "on" : ""}">Whole clip</button></div>`;
 const telePane = () => pane("Telemetry", `<div id="tele"></div>`, zoomSeg() + `<details class="menu"${st.menuOpen ? " open" : ""}><summary>Readings</summary><div>${ALL_R.map(cb).join("")}</div></details>`);
@@ -512,12 +534,16 @@ function render() {
       ${telePane()}
       ${cls(pane("Declared workloads", `<div class="tl${live || raw ? " nolink" : ""}" id="tl"></div>`, note))}
       ${cls(pane("Rules", `<div id="rules"></div>`, note))}
+      <details class="rnote"${st.noteOpen ? " open" : ""}><summary>A note on rules</summary><p>Three simple thresholds told apart every workload I recorded, with wide margins. None of the workloads were trying to hide, so robustness is untested; but a wide margin is a good sign for a classifier that is robust enough in practice.</p></details>
     </div><aside class="side">${pane("What flows where", archSVG(W))}</aside></div>`;
   bind(); paint();
 }
 function bind() {
   const on = (sel, f, ev = "onclick") => document.querySelectorAll(sel).forEach(b => b[ev] = e => f(b, e));
   on("[data-lev]", b => pickLever(+b.dataset.lev, +b.dataset.i));
+  const rn = $("details.rnote"); if (rn) rn.ontoggle = () => { st.noteOpen = rn.open; };
+  const rl = $("#rules"); if (rl) rl.onclick = e => { const r = e.target.closest("[data-rule]"); if (!r) return; const k = r.dataset.rule;
+    st.ruleOpen.has(k) ? st.ruleOpen.delete(k) : st.ruleOpen.add(k); paint(); };
   on("[data-sseg]", b => { st.seg = st.seg === b.dataset.sseg ? null : b.dataset.sseg; render(); });
   on("[data-sk]", b => { const [i, k] = b.dataset.sk.split(":"), s = st.side[+i]; sideSet(() => { if (s.k !== k) { s.k = k; s.pick = [...KINDS[k].cells[0].pick]; } }); });
   on("[data-sopt]", b => { const [i, L, j] = b.dataset.sopt.split(":").map(Number), s = st.side[i], q = nearest(s.k, s.pick, L, j); if (q) sideSet(() => { s.pick = [...q.pick]; }); });
@@ -676,15 +702,72 @@ function paintTL(el, W, now) {
   const PB = y - GAP, H = PB + 30;
   el._hits = hits; el.firstChild.innerHTML = svg(Wd, H, s + axis(g, W, now, PB, H) + top); showTip(el);
 }
+// What each rule says when opened. q = the rule as one question; on = where it applies; why = why that reading
+// tells you that; thr/unit/key = what "Right now" and the graph read; judged(W, ni, now) = does this rule look at node ni.
+const activeJobs = (W, now) => W.jobs.filter(j => j.start <= now && now < j.limit);
+const RULE_INFO = {
+  undeclared_load: { q: W => `Is mean power over the last 60 s > ${laneScale(W).busy} W?`, on: "on any GPU that isn't in a declared job",
+    why: "Real work draws real power: an idle H200 sits near 80 W; every recorded workload drew 300 W or more. A busy GPU nobody declared is running something off the books.",
+    key: "power", unit: "W", thr: W => laneScale(W).busy, max: W => laneScale(W).max, fmt: v => `${Math.round(v)} W`,
+    judged: (W, ni, now) => { const cov = new Set(); activeJobs(W, now).filter(j => j.node === ni).forEach(j => { for (let g = j.g[0]; g <= j.g[1]; g++) cov.add(g); });
+      return cov.size < W.nodes[ni].gpus; }, offText: "in a job",
+    none: "every GPU is in a declared job, so none is judged" },
+  training_shaped: { q: () => "Is mean tensor-core utilisation over the last 60 s > 40%?", on: "on a node declared inference",
+    why: "Training is mostly big matrix multiplies, which keep tensor cores busy (57–79% in the recorded runs). Serving mostly waits on memory, so its tensor cores sit idle (under 20%).",
+    key: "tensor", unit: "%", thr: () => 40, max: () => 100, fmt: v => `${Math.round(v)}%`,
+    judged: (W, ni, now) => activeJobs(W, now).some(j => j.node === ni && j.type === "inference"), offText: "not declared inference",
+    none: "no node is declared inference, so none is judged" },
+  boundary_traffic: { q: () => "Is network traffic to other nodes over the last 60 s > 1 MB/s?", on: "from a node running a one-node inference job",
+    why: "A one-node job has no reason to talk to other nodes. Traffic out suggests it's half of a job split across nodes, e.g. prefill handing its work to decode.",
+    key: "net_tx", unit: "MB/s", k: 1000, thr: () => 1, max: () => 100, log: true, fmt: v => `${v < 10 ? v.toFixed(1) : Math.round(v)} MB/s`,
+    judged: (W, ni, now) => activeJobs(W, now).some(j => j.node === ni && j.type === "inference"), offText: "not declared inference",
+    none: "no node runs a one-node inference job, so none is judged" },
+};
+// a node's reading at time t: the mean across its GPUs (the network row is one value for the whole node)
+const nodeVal = (W, ni, t, I) => { const n = W.nodes[ni], gs = I.key === "net_tx" ? [0] : Array.from({ length: n.gpus }, (_, g) => g);
+  return gs.reduce((a, g) => a + metric(W, ni, g, t, I.key), 0) / gs.length * (I.k || 1); };
+const mean60 = (W, ni, now, I) => { let a = 0, c = 0; for (let t = Math.max(0, now - 60); t <= now; t += 1) { a += nodeVal(W, ni, t, I); c++; } return c ? a / c : 0; };
+function ruleGraph(W, now, I) {
+  const Wd = 560, H = 56, thr = I.thr(W), mx = I.max(W), t1 = Math.max(now, 1);
+  const y = v => I.log ? H - Math.max(0, Math.min(1, (Math.log10(Math.max(v, 0.01)) + 2) / (Math.log10(mx) + 2))) * H : H - Math.min(v, mx) / mx * H;
+  const x = t => t / t1 * (Wd - 44), N = Math.min(150, Math.max(2, Math.ceil(now)));
+  const lines = W.nodes.map((n, ni) => { const on = I.judged(W, ni, now), pts = [];
+    for (let i = 0; i <= N; i++) { const t = i / N * now; pts.push((i ? "L" : "M") + x(t).toFixed(1) + " " + y(nodeVal(W, ni, t, I)).toFixed(1)); }
+    return `<path d="${pts.join(" ")}" fill="none" stroke="${BOXC[ni % BOXC.length]}" stroke-width="1.5" opacity="${on ? 1 : 0.3}"/>`; }).join("");
+  return `<svg class="rg" viewBox="0 0 ${Wd} ${H + 12}" preserveAspectRatio="none">
+    <rect x="${x(Math.max(0, now - 60))}" y="0" width="${x(now) - x(Math.max(0, now - 60))}" height="${H}" fill="var(--grid)" opacity=".45"/>
+    <line x1="0" y1="${H}" x2="${Wd - 44}" y2="${H}" stroke="var(--axis)"/>
+    <line x1="0" y1="${y(thr)}" x2="${Wd - 44}" y2="${y(thr)}" stroke="var(--ink)" stroke-dasharray="4 3"/><text x="${Wd - 40}" y="${y(thr) + 3}">${thr} ${I.unit}</text>${lines}
+    <text x="0" y="${H + 11}">start</text>${now > 90 ? `<text x="${x(now - 60)}" y="${H + 11}">last 60 s</text>` : ""}<text x="${x(now)}" y="${H + 11}" text-anchor="end">now</text></svg>`;
+}
+function ruleDetail(W, now, k, act) {
+  const I = RULE_INFO[k], badNodes = new Set(act.flatMap(v => v.gpus.map(g => +String(g).split(":")[0])));
+  const nodes = W.nodes.map((n, ni) => { const on = I.judged(W, ni, now), v = mean60(W, ni, now, I), over = badNodes.has(ni);
+    return `<span class="${on ? "" : "off"}"><span class="nd" style="background:${BOXC[ni % BOXC.length]}"></span>${esc(n.name.split(" ")[0])} <span class="v${over ? " over" : ""}">${I.fmt(v)}</span>${over ? ` <span class="over">· over</span>` : on ? "" : ` · ${I.offText}`}</span>`; }).join("");
+  const anyJudged = W.nodes.some((_, ni) => I.judged(W, ni, now));
+  return `<div class="rdet"><div class="rspec"><span class="rl">Rule</span><span><span class="rq">${esc(I.q(W))}</span> <span class="rm">${I.on}</span></span>
+    <span class="rl">Why</span><span class="rw">${I.why}</span>
+    <span class="rl">Right now</span><span class="rnow">${nodes}${anyJudged ? "" : `<span class="off">${I.none}</span>`}</span></div>${ruleGraph(W, now, I)}</div>`;
+}
+// The rule engine names jobs ("Job 4202: …"); the Rules pane names the node instead (his ask, 2026-11-12).
+const nodesOfV = (W, v) => [...new Set(v.gpus.map(g => +String(g).split(":")[0]))].map(i => W.nodes[i] && W.nodes[i].name.split(" ")[0]).filter(Boolean).join(" + ");
+function ruleText(W, v, now) {
+  const t = textV(v, now), n = nodesOfV(W, v); let m;
+  if (!n) return t;
+  if ((m = t.match(/^Job \d+: (.*)$/))) return `${n}: ${m[1]}`;
+  if ((m = t.match(/^Job \d+ sits on one node and sends ([\d.]+) GB\/s to other nodes/))) return `${n}: sends ${Math.round(+m[1] * 1000)} MB/s to other nodes`;
+  return `${n}: ${t}`;
+}
 function paintRules(el, W, now) {
   if (!el) return;
   el.innerHTML = RULES.map(([k, t]) => {
     const act = W.viol.filter(q => q.rule === k && activeV(q, now)), v = act[0], past = W.viol.filter(q => q.rule === k && q.b <= now).length;
     const r = W.raw ? { st: "wait", pill: "not checked", text: t } : now < 30 ? { st: "wait", pill: "warming up", text: "Needs 30 s of data first" }
-            : v ? { st: "bad", pill: `broken ${dur(now - v.a)}`, text: act.map(q => textV(q, now)).join(" · ") }
+            : v ? { st: "bad", pill: `broken ${dur(now - v.a)}`, text: act.map(q => ruleText(W, q, now)).join(" · ") }
             : { st: "ok", pill: "holding", text: t + (past ? ` (broke ${past} time${past > 1 ? "s" : ""} earlier in this clip)` : "") };
-    return `<div class="rule"><span class="dot" style="background:${css({ ok: "--good", bad: "--crit", wait: "--axis" }[r.st])}"></span><span class="rname">${k}</span>
-            <span class="rtext">${esc(r.text)}</span><span class="pill ${r.st}">${esc(r.pill)}</span></div>`;
+    const open = st.ruleOpen.has(k) && !W.raw;
+    return `<div class="ritem${open ? " open" : ""}"><div class="rule" data-rule="${k}"><span class="dot" style="background:${css({ ok: "--good", bad: "--crit", wait: "--axis" }[r.st])}"></span><span class="rname">${k}</span>
+            <span class="rtext">${esc(r.text)}</span><span class="pill ${r.st}">${esc(r.pill)}</span><span class="rcar">▶</span></div>${open ? ruleDetail(W, now, k, act) : ""}</div>`;
   }).join("");
 }
 function paint() {

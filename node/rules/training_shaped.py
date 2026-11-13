@@ -15,7 +15,7 @@ removed on 2026-11-11: on H200 it fired on honest serving under a steady load (6
 sessions, 12 of 88 at 16), while tensor cores caught every training run without it.
 """
 NAME = "training_shaped"
-TENSOR_UTIL_PCT = 45.0   # tensor cores busier than this (median of the trailing minute)
+TENSOR_UTIL_PCT = 40.0   # tensor cores busier than this (median of the trailing minute)
 TEXT = f"A job declared inference keeps its tensor cores > {TENSOR_UTIL_PCT:.0f}% busy (60 s median)."
 
 
