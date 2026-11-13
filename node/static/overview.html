@@ -20,12 +20,10 @@
   .essay h1 { font-size: 26px; line-height: 1.25; }
   .meta { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 6px 0 4px; }
-  .btn { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 6px;
-         font-size: 14px; text-decoration: none; }
-  .btn.primary { background: var(--ink); color: var(--page); font-weight: 600; }
-  .btn.primary:hover { color: var(--page); opacity: .88; }
-  .btn.ghost { border: 1px solid rgba(11,11,11,0.15); color: var(--ink); }
-  .btn.ghost[aria-disabled="true"] { color: var(--muted); pointer-events: none; }
+  /* same as the Replay page's buttons: square, thin outline, no fill */
+  .btn { display: inline-flex; align-items: center; padding: 6px 14px; border: 1px solid var(--axis); border-radius: 0;
+         background: transparent; color: var(--ink); font-size: 14px; text-decoration: none; white-space: nowrap; }
+  .btn:hover { background: var(--grid); color: var(--ink); }
   .context { color: var(--ink2); font-style: italic; margin: 6px 0 0; }
   .essay h2 { font-size: 17px; font-weight: 600; margin: 26px 0 0; }
   .essay p { margin: 0; }
@@ -54,9 +52,7 @@
   <h1>Prototype: Telemetry-based Compute Verification</h1>
   <div class="meta">draft · Atharva Nihalani · Nov 10, 2026 · Lucid internal</div>
   <div class="actions">
-    <a class="btn primary" href="/replay">Open the demo →</a>
-    <!-- TODO(before prod): remove "Read as Google Doc". Lucid-internal only: the doc is not public. -->
-    <a class="btn ghost" id="gdoc" href="#" target="_blank" rel="noopener">Read as Google Doc</a>
+    <a class="btn" href="/replay">Open the demo →</a>
   </div>
 
   <p class="context">Context: This is a public write-up for an <a href="/replay">accompanying demo</a></p>
@@ -113,12 +109,5 @@
 
   <div class="foot">Draft written by Atharva; it will change. <a href="/replay">Open the demo →</a></div>
 </main>
-<script>
-  // TODO(before prod): remove with the button above. Paste the essay's Google Doc URL here.
-  const GDOC_URL = "https://docs.google.com/document/d/1NONM-TS9p_ridgv_7Y26XEFWGajACbxMZB92wkRTm8Y/edit?tab=t.0";
-  const g = document.getElementById("gdoc");
-  if (GDOC_URL) g.href = GDOC_URL;
-  else { g.setAttribute("aria-disabled", "true"); g.textContent = "Read as Google Doc (link not set)"; }
-</script>
 </body>
 </html>

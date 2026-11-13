@@ -49,19 +49,55 @@
   .pills.big button { font-size: 15px; padding: 6px 22px; border-radius: 7px; }
   .pills.big button:hover:not(.on) { background: rgba(11,11,11,.04); }
   .pills.big button.on { background: var(--surface); box-shadow: 0 1px 2px rgba(11,11,11,.12); }
-  /* lever rows: one row per thing that differs between recordings */
-  .levers { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: center; }
-  .levers .ln { font-size: 13.5px; font-weight: 600; padding-left: 12px; }
+  /* step 1's selector ("C2", picked 2026-11-12): workload as underline tabs, then the levers side by side, each a
+     small capitalised label over the page's quiet pills */
+  .tabs { display: flex; gap: 22px; flex: 1; border-bottom: 1px solid var(--grid); }
+  .tabs button { font: inherit; font-size: 14.5px; border: 0; background: none; padding: 0 0 7px; color: var(--ink2); cursor: pointer;
+                 border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+  .tabs button:hover:not(.on) { color: var(--ink); }
+  .tabs button.on { color: var(--ink); font-weight: 600; border-color: var(--ink); }
+  .levers { display: flex; flex-wrap: wrap; gap: 10px 28px; }
+  .levers .ln { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px 11px; }
+  .levers .pills { gap: 2px; }
   .levers .pills button { font-size: 13.5px; padding: 3px 11px; }
   .levers .pills button.far { color: var(--muted); }
   .levers .pills button:disabled { color: var(--axis); cursor: default; background: transparent; }
-  .wl { display: flex; align-items: center; gap: 14px; justify-self: stretch; }
+  .wl { display: flex; align-items: flex-end; gap: 14px; justify-self: stretch; }
+  .wl details.menu { margin-bottom: 6px; }
+  /* Side by side ("C·2", picked 2026-11-12): one row per node; the summary is the picker, each level its own small menu */
+  .sidelist { display: grid; gap: 4px; }
+  .srow { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+  .srow .nn { font: 12.5px ui-monospace, Menlo, monospace; color: var(--ink2); white-space: nowrap; padding-left: 11px; }
+  .srow .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 3px; }
+  .segs { display: flex; flex-wrap: wrap; align-items: center; gap: 1px; }
+  .segs .sep { color: var(--axis); padding: 0 2px; }
+  .sseg { position: relative; }
+  .sseg > button { font: inherit; font-size: 13.5px; padding: 3px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); cursor: pointer; white-space: nowrap; }
+  .sseg > button::after { content: " ▾"; color: var(--muted); font-size: 10px; }
+  .sseg > button:hover, .sseg.open > button { background: var(--grid); }
+  .sseg.first > button { font-weight: 600; }
+  .sseg .pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 8; background: var(--surface); border: 1px solid var(--axis); padding: 6px 0;
+              min-width: 190px; box-shadow: 0 4px 14px rgba(11,11,11,.08); }
+  .sseg .pop .g { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 4px 12px; }
+  .sseg .pop button { display: flex; width: 100%; justify-content: flex-start; gap: 0; font: inherit; font-size: 13.5px; border: 0; background: none;
+                     padding: 5px 14px 5px 8px; cursor: pointer; color: var(--ink); text-align: left; white-space: nowrap; }
+  .sseg .pop button:hover:not(:disabled) { background: rgba(11,11,11,.05); }
+  .sseg .pop button::before { content: ""; width: 16px; flex: none; } .sseg .pop button.on { font-weight: 600; } .sseg .pop button.on::before { content: "✓"; }
+  .sseg .pop button.far { color: var(--muted); }
+  .sseg .pop button:disabled { color: var(--axis); cursor: default; }
+  .sseg .pop small { color: var(--muted); font-size: 11.5px; font-weight: 400; margin-left: auto; padding-left: 14px; }
+  .srm { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 4px; }
+  .srm:hover { color: var(--ink); }
+  .sadd { font: inherit; font-size: 13px; border: 0; background: none; color: var(--ink2); cursor: pointer; padding: 2px 0 0 11px; justify-self: start; }
+  .sadd:hover { color: var(--ink); }
   .how { min-width: 320px; max-width: 460px; white-space: normal; line-height: 1.45; } .how b { font-weight: 600; } .how code { font: 11.5px ui-monospace, Menlo, monospace; }
   .how a { color: var(--s1); }
   .scnote { margin: 0 0 0 12px; font-size: 13px; color: var(--ink2); max-width: 700px; } .scnote b { font-weight: 600; color: var(--ink); }
   .scnote .played { color: var(--muted); }
   .scnote .k-missed, .scnote .k-false { color: var(--crit); } .scnote .k-caught, .scnote .k-holds { color: var(--good); }
-  .phase { font-size: 12.5px; color: var(--muted); margin: -4px 0 10px 38px; min-height: 18px; }
+  .phase { font-size: 12.5px; color: var(--muted); margin: -4px 0 10px 38px; min-height: 18px; display: flex; flex-wrap: wrap; gap: 3px 12px; align-items: center; }
+  .phase .pd { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; vertical-align: 1px; }
+  .phase .pd:last-of-type { margin-right: 6px; }
   .label { font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink); margin: 0 0 3px 12px; }
   .lede { margin: 0 0 12px; }
   .sel { display: grid; gap: 10px; justify-items: start; margin-bottom: 12px; }
@@ -70,6 +106,17 @@
   .transport .time { font: 12.5px ui-monospace, Menlo, monospace; color: var(--ink); min-width: 96px; }
   .playbtn { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--axis); background: transparent; color: var(--ink); cursor: pointer; font-size: 11px; }
   .seg.sp button { background: transparent; }
+  /* Play bar "c" (his pick, 2026-11-12): the bar sits in the light track of the big "See the telemetry" switch, chosen bits
+     raised in white. --p = how far through the clip, set in paint(). */
+  .transport input[type=range] { -webkit-appearance: none; appearance: none; height: 16px; background: transparent; cursor: pointer; }
+  .transport input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; }
+  .transport { background: #e8e7e1; border-radius: 9px; padding: 3px; gap: 8px; }
+  .playbtn { border: 0; border-radius: 7px; width: 30px; height: 26px; background: var(--surface); box-shadow: 0 1px 2px rgba(11,11,11,.12); }
+  .transport .time { min-width: 90px; }
+  .transport input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--ink2) var(--p, 0%), rgba(11,11,11,.12) var(--p, 0%)); }
+  .transport input[type=range]::-webkit-slider-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px rgba(11,11,11,.2), 0 1px 2px rgba(11,11,11,.2); margin-top: -4px; }
+  .seg.sp { border: 0; gap: 2px; background: transparent; } .seg.sp button { border: 0; border-radius: 7px; padding: 3px 10px; }
+  .seg.sp button.on { background: var(--surface); box-shadow: 0 1px 2px rgba(11,11,11,.12); }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }   /* left: everything you operate and read; right: the diagram, alone */
   .side { position: sticky; top: 56px; display: grid; gap: 0; }
   @media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } .side { position: static; } }
@@ -145,6 +192,10 @@
   @keyframes flow { to { stroke-dashoffset: -15.1; } }
   .arch .a-gpu { fill: var(--axis); }
   .arch.rawmode .a-later { opacity: .2; } .arch.rawmode .a-later .a-dots { display: none; }
+  /* 1b (his pick, 2026-11-12): Slurm is a hatched band round the nodes it runs; declarations leave it in green */
+  .arch .a-sched { fill: url(#a-hatch); stroke: var(--axis); }
+  .arch .a-decl { color: var(--good); } .arch .a-decl .a-dots { stroke: var(--good); }
+  .arch .a-decl text.lab { fill: color-mix(in srgb, var(--good) 75%, var(--ink)); }
 </style>
 </head>
 <body>
@@ -206,16 +257,30 @@ const KINDS = {
         how: [["Server", `${VL}, two servers: prefill on node-a, decode on node-b, cached context handed over the network (NixlConnector, 8 × 200 Gb/s Ethernet ports a node)`],
               ["Load", AX(16) + ", through a proxy"], ["Measured", "662 tokens/s out; almost every prompt token reached the decode server by transfer"]] }] },
 };
-const RAW_NAMES = ["Pretraining", "Inference", "Both, side by side"], KIND = ["pre", "inf"];
-const BOTH = { nodes: [["node-a", "i1", "load_16"], ["node-b", "p1b", "train_start"]], before: 60, len: 600 };
+const RAW_NAMES = ["Pretraining", "Inference", "Side by side"], KIND = ["pre", "inf"];
+// Side by side: any recordings, one row each (st.side), up to SIDE_MAX nodes in all (the split takes two). Clips are
+// lined up to start together and the shortest sets the length. A pretraining clip starts 60 s before training does.
+const SIDE_MAX = 4, LETTERS = "abcdefgh", KTITLE = { pre: "Pretraining", inf: "Inference" };
+const SHOW = { pre: [v => `batch ${v}`, v => `${v} checkpointing`], inf: [v => v, v => v.replace("prefill and decode split, two nodes", "prefill/decode split"), v => `${v} sessions`] };   // how a choice reads in the row
+const sideCell = s => KINDS[s.k].cells.find(c => c.pick.every((v, i) => v === s.pick[i]));
+const clipOf = c => c.at ? c : { ...c, at: "train_start", before: 60, to: "train_stop", after: 0 };
+const sideNodes = side => side.reduce((n, s) => n + sideCell(s).nodes.length, 0);
+function nearest(k, pick, L, i) {   // the recorded combination with lever L = i that keeps most of the other choices
+  const score = q => q.pick.filter((v, j) => v === pick[j]).length;
+  return KINDS[k].cells.filter(q => q.pick[L] === i).sort((a, b) => score(b) - score(a))[0];
+}
 const nodeOf = ([name, rec], at, before) => ({ name, rec, gpus: IDX.recs[rec].gpus, off: at ? Math.max(0, IDX.recs[rec].mark[at] - before) : 0 });
 const cellOf = kind => KINDS[kind].cells.find(c => c.pick.every((v, i) => v === st.pick[kind][i]));
 let _rw = { key: "" };
 function rawWorld() {
-  const key = st.raw + "|" + JSON.stringify(st.pick);
+  const key = st.raw + "|" + JSON.stringify(st.pick) + (st.raw === 2 ? JSON.stringify(st.side) : "");
   if (_rw.key === key) return _rw.W;
   const W = { raw: true, name: RAW_NAMES[st.raw], jobs: [], viol: [], extra: [] };
-  if (st.raw === 2) { W.nodes = BOTH.nodes.map(q => nodeOf(q, q[2], BOTH.before)); W.dur = BOTH.len; }
+  if (st.raw === 2) { let li = 0; const durs = []; W.nodes = [];
+    for (const s of st.side) { const c = clipOf(sideCell(s));
+      const ns = c.nodes.map(([nm, rec]) => nodeOf([`node-${LETTERS[li++]}${nm.includes(" · ") ? " · " + nm.split(" · ")[1] : ""}`, rec], c.at, c.before));
+      W.nodes.push(...ns); durs.push(Math.min(...ns.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off))); }
+    W.dur = Math.min(...durs); }
   else { const c = cellOf(KIND[st.raw]); W.nodes = c.nodes.map(q => nodeOf(q, c.at, c.before)); W.cell = c;
     W.dur = c.to ? Math.min(...W.nodes.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off)) : IDX.recs[c.nodes[0][1]].n; }
   _rw = { key, W }; return W;
@@ -243,6 +308,15 @@ const gpuName = W => W.fake ? "B200" : IDX.recs[W.nodes[0].rec].gpu;
 // the power axis of the lanes: Blackwell cards reach 1 kW, Hopper cards 700 W
 const laneScale = W => /B[23]00/.test(gpuName(W)) ? { max: 1300, grid: 1000, label: "1 kW", busy: 300 } : { max: 800, grid: 500, label: "500 W", busy: 200 };
 // what the recording was doing t seconds into the clip, from its own marks and the trainer's log
+// One entry per distinct phase: a dot in each such node's colour, then grey text (his pick, 2026-11-12). Always dotted,
+// even with one node or when every node is doing the same thing.
+const BOXC = ["#2a78d6", "#eb6834", "#1baf7a", "#7f5af0", "#d6a419", "#d6467e", "#2fb5c9", "#8a6d4a"];   // live.js's box colours
+function phaseHTML(W, t) {
+  if (W.fake) return "";
+  const names = W.nodes.map(n => { let s = ""; for (const [pt, name] of IDX.recs[n.rec].phases) if (pt <= t + n.off) s = name; return s; });
+  const by = new Map(); names.forEach((q, i) => { if (q) (by.get(q) || by.set(q, []).get(q)).push(i); });
+  return [...by].map(([q, ix]) => `<span>${ix.map(i => `<span class="pd" style="background:${BOXC[i % BOXC.length]}"></span>`).join("")}${esc(q)}</span>`).join("");
+}
 function phaseAt(W, t) {
   if (W.fake) return "";
   const names = W.nodes.map(n => { let s = ""; for (const [pt, name] of IDX.recs[n.rec].phases) if (pt <= t + n.off) s = name; return s; });
@@ -306,7 +380,8 @@ const TYPE = { inference: "#2a78d6", pretraining: "#3f8f5b" }, RED = "#d03b3b", 
 
 // ---------------------------------------------------------------- state
 // Settled so far: square panels, a Readings menu, and two steps (see the telemetry first, then check it).
-const st = { mode: "raw" /* raw = step 1 | check = step 2 */, raw: 0, pick: { pre: [0, 0], inf: [0, 0, 1] }, zoom: false, howOpen: false, sc: 1, now: 0, paused: false, speed: 12, hold: 0,
+const st = { mode: "raw" /* raw = step 1 | check = step 2 */, raw: 0, pick: { pre: [0, 0], inf: [0, 0, 1] },
+             side: [{ k: "inf", pick: [0, 0, 1] }, { k: "pre", pick: [0, 0] }], seg: null /* open menu in Side by side: "row:level" */, zoom: false, howOpen: false, sc: 1, now: 0, paused: false, speed: 12, hold: 0,
              strips: new Set(["power", "tensor", "pcie_tx"]), menuOpen: false, box: "none", connectedAt: 0, src: "rec", addOpen: false };
 const isLive = () => st.box === "connected" && st.src === "live";
 const world = () => st.mode === "raw" ? rawWorld() : IDX.scenarios[st.sc];
@@ -325,10 +400,30 @@ function pillsRaw(on) {
   const menu = `<details class="menu" id="how"${st.howOpen ? " open" : ""}><summary>How it was recorded</summary><div class="how">
       ${rows.map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("")}<span><a href="/walkthrough">Run it yourself →</a></span></div></details>`;
   const has = (L, i, exact) => K.cells.some(q => q.pick[L] === i && (!exact || q.pick.every((v, j) => j === L || v === st.pick[kind][j])));
-  return `<div class="wl"><div class="pills">${RAW_NAMES.map((n, i) => `<button data-raw="${i}" class="${on && i === st.raw ? "on" : ""}">${esc(n)}</button>`).join("")}</div><span class="grow"></span>${menu}</div>` +
-    (K ? `<div class="levers">${K.levers.map((lv, L) => `<span class="ln">${esc(lv.label)}</span><div class="pills">${lv.opts.map((o, i) =>
-      `<button data-lev="${L}" data-i="${i}" class="${i === st.pick[kind][L] ? "on" : has(L, i, 1) ? "" : "far"}"${has(L, i) ? has(L, i, 1) ? "" : ` title="recorded in another combination; choosing it changes the other rows"` : ` disabled title="not recorded yet"`}>${esc(o)}</button>`).join("")}</div>`).join("")}</div>` : "");
+  return `<div class="wl"><div class="tabs">${RAW_NAMES.map((n, i) => `<button data-raw="${i}" class="${on && i === st.raw ? "on" : ""}">${esc(n)}</button>`).join("")}</div><span class="grow"></span>${menu}</div>` +
+    (st.raw === 2 ? sideRows() : "") + (K ? `<div class="levers">${K.levers.map((lv, L) => `<div><div class="ln">${esc(lv.label)}</div><div class="pills">${lv.opts.map((o, i) =>
+      `<button data-lev="${L}" data-i="${i}" class="${i === st.pick[kind][L] ? "on" : has(L, i, 1) ? "" : "far"}"${has(L, i) ? has(L, i, 1) ? "" : ` title="recorded in another combination; choosing it changes the other rows"` : ` disabled title="not recorded yet"`}>${esc(o)}</button>`).join("")}</div></div>`).join("")}</div>` : "");
 }
+function sideRows() {
+  let li = 0; const total = sideNodes(st.side), C = window.BOX_COLORS || ["#2a78d6", "#eb6834", "#1baf7a", "#7f5af0"];
+  const rows = st.side.map((s, i) => { const K = KINDS[s.k], c = sideCell(s), first = li, w = c.nodes.length; li += w;
+    const name = w > 1 ? `node-${LETTERS[first]}+${LETTERS[first + 1]}` : `node-${LETTERS[first]}`;
+    const sw = c.nodes.map((_, j) => `<span class="sw" style="background:${C[(first + j) % C.length]}"></span>`).join("");
+    const isOpen = L => st.seg === `${i}:${L}`;
+    const kinds = `<span class="sseg first${isOpen(-1) ? " open" : ""}"><button data-sseg="${i}:-1">${KTITLE[s.k]}</button>${isOpen(-1) ? `<div class="pop">` +
+      ["pre", "inf"].map(k => { const ok = k === s.k || total - w + KINDS[k].cells[0].nodes.length <= SIDE_MAX;
+        return `<button data-sk="${i}:${k}" class="${k === s.k ? "on" : ""}"${ok ? "" : ` disabled title="at most ${SIDE_MAX} nodes"`}>${KTITLE[k]}</button>`; }).join("") + `</div>` : ""}</span>`;
+    const levels = K.levers.map((lv, L) => `<span class="sep">›</span><span class="sseg${isOpen(L) ? " open" : ""}"><button data-sseg="${i}:${L}">${esc(SHOW[s.k][L](lv.opts[s.pick[L]]))}</button>${isOpen(L) ? `<div class="pop"><div class="g">${esc(lv.label)}</div>` +
+      lv.opts.map((o, j) => { const q = nearest(s.k, s.pick, L, j), exact = q && q.pick.every((v, m) => m === L || v === s.pick[m]);
+        const fits = q && total - w + q.nodes.length <= SIDE_MAX;
+        const tip = !q ? "not recorded yet" : !fits ? `at most ${SIDE_MAX} nodes` : exact ? "" : "recorded in another combination; the other choices in this row will change";
+        return `<button data-sopt="${i}:${L}:${j}" class="${j === s.pick[L] ? "on" : q && !exact ? "far" : ""}"${!q || !fits ? " disabled" : ""}${tip ? ` title="${tip}"` : ""}>${esc(o)}${!q ? "<small>soon</small>" : ""}</button>`; }).join("") + `</div>` : ""}</span>`).join("");
+    return `<div class="srow"><span class="nn">${sw}${name}</span><span class="segs">${kinds}${levels}</span>${st.side.length > 1 ? `<button class="srm" data-srm="${i}" title="remove">×</button>` : "<span></span>"}</div>`; }).join("");
+  return `<div class="sidelist">${rows}${total < SIDE_MAX ? `<button class="sadd" data-sadd>＋ Add a node</button>` : ""}</div>`;
+}
+function sideSet(f) { f(); st.seg = null; st.now = 0; st.paused = false; render(); }
+// clicking anywhere outside an open menu closes it
+document.addEventListener("click", e => { if (st.seg != null && !e.target.closest(".sseg")) { st.seg = null; render(); } });
 function pickLever(L, i) {
   const kind = KIND[st.raw], cur = st.pick[kind], score = q => q.pick.filter((v, j) => v === cur[j]).length;
   const best = KINDS[kind].cells.filter(q => q.pick[L] === i).sort((a, b) => score(b) - score(a))[0];
@@ -360,21 +455,30 @@ function steps() {
 
 // What flows where, from the sketch. Parts that only matter once declarations exist carry class a-later,
 // so the first half (raw telemetry) can dim them.
+// "What flows where", variant 1b (his pick, 2026-11-12). The node rows sit centred, one per node (1 to 4), inside a
+// hatched band = Slurm, the scheduler that runs them. Each node's telemetry leaves the end of its row, joins a spine
+// inside the band, rises out of it and enters the Verification Node from below; declarations leave the band's right
+// edge in green and enter from the side.
 function archSVG(W) {
-  const two = W.nodes.length > 1, HH = two ? 350 : 310;
-  const gpus = (x0, y0) => W.nodes.map((n, ni) => { const y = y0 + ni * 40;
+  const N = W.nodes.length, y0 = 262, bandT = y0 - 22, bandB = y0 + (N - 1) * 40 + 24, HH = bandB + 48;
+  const G = Math.max(...W.nodes.map(n => n.gpus)), W8 = G * 14 - 3, x0 = Math.round(150 - (W8 + 18) / 2), spine = x0 + W8 + 14, inX = 128;
+  const gpus = W.nodes.map((n, ni) => { const y = y0 + ni * 40;
     return `<text x="${x0}" y="${y - 5}" class="a-s">${esc(n.name)}</text>` +
       Array.from({ length: n.gpus }, (_, g) => `<rect class="a-gpu" data-k="${ni}:${g}" x="${x0 + g * 14}" y="${y}" width="11" height="11"/>`).join(""); }).join("");
   const flow = (d, dash) => `<path d="${d}" class="a-line${dash ? " dash" : ""}" marker-end="url(#a-arr)"/><path d="${d}" class="a-dots"/>`;
-  return `<svg id="arch" class="arch" viewBox="0 0 300 ${HH}"><defs><marker id="a-arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="currentColor" stroke-width="1.6"/></marker></defs>
-    <rect x="6" y="94" width="288" height="${HH - 100}" class="a-prover"/><text x="150" y="${HH - 14}" text-anchor="middle" class="a-s">Prover (neocloud / lab)</text>
-    <g class="a-later"><rect x="70" y="6" width="160" height="42" class="a-org"/><text x="150" y="24" text-anchor="middle" class="a-t">Verification organisation</text><text x="150" y="38" text-anchor="middle" class="a-s">govt / Averi / etc</text>
+  const comb = W.nodes.map((n, i) => { const d = `M${x0 + n.gpus * 14} ${y0 + i * 40 + 5.5} H${spine} V228 H${inX} V168`;
+    return `<path d="${d}" class="a-line"${i ? "" : ' marker-end="url(#a-arr)"'}/><path d="${d}" class="a-dots" style="animation-delay:${-0.3 * i}s"/>`; }).join("");
+  return `<svg id="arch" class="arch" viewBox="0 0 300 ${HH}"><defs><marker id="a-arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="currentColor" stroke-width="1.6"/></marker>
+      <pattern id="a-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--surface)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--grid)" stroke-width="2"/></pattern></defs>
+    <rect x="6" y="94" width="288" height="${HH - 100}" class="a-prover"/><text x="150" y="${HH - 14}" text-anchor="middle" class="a-s">Prover</text>
+    <g class="a-later"><rect x="70" y="6" width="160" height="42" class="a-org"/><text x="150" y="31" text-anchor="middle" class="a-t">Verifier</text>
       ${flow("M150 116 V52", true)}<text x="160" y="69">report</text><text x="160" y="83" style="font-size:10px" id="a-rep"></text></g>
-    <rect x="80" y="116" width="140" height="48" class="a-node"/><text x="150" y="136" text-anchor="middle" class="a-nt">Verification node</text><text x="150" y="151" text-anchor="middle" class="a-ns" id="a-node"></text>
-    ${flow("M112 230 V168")}<text x="104" y="196" text-anchor="end">telemetry</text><text x="104" y="209" text-anchor="end" class="a-s">power, counters</text>
-    <g class="a-later">${flow("M196 246 V168")}<text x="204" y="196">declarations</text><text x="204" y="209" class="a-s">job, type, GPUs</text>
-      <rect x="170" y="248" width="92" height="40" class="a-box"/><text x="216" y="266" text-anchor="middle">Slurm</text><text x="216" y="279" text-anchor="middle" class="a-s" id="a-jobs"></text></g>
-    ${gpus(22, 250)}</svg>`;
+    <rect x="80" y="116" width="140" height="48" class="a-node"/><text x="150" y="136" text-anchor="middle" class="a-nt">Verification Node</text><text x="150" y="151" text-anchor="middle" class="a-ns" id="a-node"></text>
+    <g class="a-later"><rect x="14" y="${bandT}" width="262" height="${bandB - bandT}" rx="8" class="a-sched"/>
+      <text x="270" y="${bandB + 12}" text-anchor="end" class="a-s">Slurm, the central scheduler · <tspan id="a-jobs"></tspan></text></g>
+    ${comb}<text x="${inX - 8}" y="196" text-anchor="end">telemetry</text><text x="${inX - 8}" y="209" text-anchor="end" class="a-s">from each node</text>
+    <g class="a-later a-decl">${flow(`M276 ${bandT + 20} H286 V140 H224`)}<text x="282" y="196" text-anchor="end" class="lab">declarations</text><text x="282" y="209" text-anchor="end" class="a-s">job, type, GPUs</text></g>
+    ${gpus}</svg>`;
 }
 function paintArch(W, now) {
   const root = $("#arch"); if (!root) return;
@@ -414,6 +518,11 @@ function render() {
 function bind() {
   const on = (sel, f, ev = "onclick") => document.querySelectorAll(sel).forEach(b => b[ev] = e => f(b, e));
   on("[data-lev]", b => pickLever(+b.dataset.lev, +b.dataset.i));
+  on("[data-sseg]", b => { st.seg = st.seg === b.dataset.sseg ? null : b.dataset.sseg; render(); });
+  on("[data-sk]", b => { const [i, k] = b.dataset.sk.split(":"), s = st.side[+i]; sideSet(() => { if (s.k !== k) { s.k = k; s.pick = [...KINDS[k].cells[0].pick]; } }); });
+  on("[data-sopt]", b => { const [i, L, j] = b.dataset.sopt.split(":").map(Number), s = st.side[i], q = nearest(s.k, s.pick, L, j); if (q) sideSet(() => { s.pick = [...q.pick]; }); });
+  on("[data-srm]", b => sideSet(() => st.side.splice(+b.dataset.srm, 1)));
+  on("[data-sadd]", () => sideSet(() => st.side.push({ k: "pre", pick: [...KINDS.pre.cells[0].pick] })));
   on("[data-zoom]", b => setZoom(b.dataset.zoom === "1"));
   const how = $("#how"); if (how) how.ontoggle = () => { st.howOpen = how.open; };
   on("[data-raw]", b => { st.raw = +b.dataset.raw; st.mode = "raw"; st.src = "rec"; st.now = 0; st.paused = false; render(); });
@@ -581,10 +690,11 @@ function paintRules(el, W, now) {
 function paint() {
   if (!IDX) return;
   const { W, t, live } = cur(), ph = $("#phase");
-  need(W); if (ph) ph.textContent = phaseAt(W, st.now);
+  need(W); if (ph) { const h = phaseHTML(W, st.now); if (ph._h !== h) { ph.innerHTML = h; ph._h = h; } }
   const play = $("#play"), scrub = $("#scrub"), tt = $("#ttime"), clock = $("#clock");
   if (play) play.textContent = st.paused ? "▶" : "❚❚";
   if (scrub && document.activeElement !== scrub) scrub.value = st.now;
+  if (scrub) scrub.style.setProperty("--p", (100 * st.now / (+scrub.max || 1)).toFixed(2) + "%");
   if (tt) tt.textContent = `${mmss(st.now)} / ${mmss(world().dur)}`;
   if (clock) clock.textContent = new Date().toTimeString().slice(0, 8);
   paintTele($("#tele"), [{ W, t, live }]); paintTL($("#tl"), W, t); paintRules($("#rules"), W, t); paintArch(W, t);
