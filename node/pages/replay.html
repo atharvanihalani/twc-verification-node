@@ -176,14 +176,15 @@
   .rnow .nd { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
   .rnow .v { font: 12.5px ui-monospace, Menlo, monospace; } .rnow .over { color: var(--crit); }
   .rnow .off { color: var(--muted); }
-  /* "A note on rules": light text under the Rules pane, closed by default */
+  /* "Note on rules": light text under the Rules pane, closed by default */
   details.rnote { margin: -4px 0 14px 12px; font-size: 12.5px; color: var(--muted); max-width: 640px; }
   details.rnote summary { cursor: pointer; list-style: none; } details.rnote summary::-webkit-details-marker { display: none; }
   details.rnote summary::after { content: " ▾"; font-size: 10px; } details.rnote[open] summary::after { content: " ▴"; }
   details.rnote summary:hover { color: var(--ink2); }
   details.rnote p { margin: 6px 0 0; line-height: 1.5; }
-  svg.rg { display: block; width: 100%; height: 66px; margin-top: 10px; overflow: visible; }
-  svg.rg text { font: 10px ui-monospace, Menlo, monospace; fill: var(--muted); }
+  .rgw { position: relative; margin-top: 10px; height: 80px; }
+  svg.rg { display: block; width: 100%; height: 68px; overflow: visible; }
+  .rgl { position: absolute; font: 10px ui-monospace, Menlo, monospace; color: var(--muted); white-space: nowrap; line-height: 1; }
   .pill.ok { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good); }
   .pill.bad { background: color-mix(in srgb, var(--crit) 14%, transparent); color: var(--crit); }
   .pill.wait { background: var(--grid); color: var(--ink2); }
@@ -267,7 +268,9 @@ const KINDS = {
           ["Measured", "about 0.8 s a step"]] },
       { pick: [0, 1], nodes: [["node-a", "p2"]], at: "train_start", before: 30, how: [["Workload", `${TT}, batch 4`], ["Activation checkpointing", "recompute only the feed-forward's wide layer on the way back; half the memory (60 GiB against 115)"],
           ["Checkpoint saves", "every 60 steps, 90 GB, about 35 s each"], ["Measured", "about 3.2 s a step"],
-          ["Caveat", "a package install ran on this node for 2 minutes of the recording"]] }] },
+          ["Caveat", "a package install ran on this node for 2 minutes of the recording"]] },
+      { pick: [1, 1], nodes: [["node-a", "p4"]], at: "train_start", before: 30, how: [["Workload", `${TT}, batch 1`], ["Activation checkpointing", "recompute only the feed-forward's wide layer on the way back (32 GiB against 46 at batch 1)"],
+          ["Checkpoint saves", "every 210 steps, 90 GB, 20 to 27 s each; training waits"], ["Measured", "about 0.9 s a step, 605 W per GPU"]] }] },
   inf: { levers: [
       { label: "Model", opts: ["DeepSeek V4.1 Flash", "MiniMax M3.1 Flash", "Qwen 3.8 Flash"] },
       { label: "Layout", opts: ["tensor-parallel", "expert-parallel", "prefill and decode split, two nodes"] },
@@ -276,10 +279,15 @@ const KINDS = {
       { pick: [0, 0, 1], nodes: [["node-a", "i1"]], at: "warm_16", before: 0, to: "load_end_16", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(16)], ["Measured", "660 tokens/s out"]] },
       { pick: [0, 0, 2], nodes: [["node-a", "i1"]], at: "warm_64", before: 0, to: "load_end_64", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(64)], ["Measured", "1,802 tokens/s out"]] },
       { pick: [0, 1, 1], nodes: [["node-a", "i2"]], at: "warm_16", before: 0, to: "load_end_16", after: 0, how: [["Server", `${VL}, <code>--data-parallel-size 8 --enable-expert-parallel</code> behind vllm-router`], ["Load", AX(16)], ["Measured", "652 tokens/s out"]] },
+      { pick: [0, 1, 0], nodes: [["node-a", "i4"]], at: "warm_4", before: 0, to: "load_end_4", after: 0, how: [["Server", `${VL}, <code>--data-parallel-size 8 --enable-expert-parallel</code> behind vllm-router`], ["Load", AX(4)], ["Measured", "197 tokens/s out"]] },
+      { pick: [0, 1, 2], nodes: [["node-a", "i4"]], at: "warm_64", before: 0, to: "load_end_64", after: 0, how: [["Server", `${VL}, <code>--data-parallel-size 8 --enable-expert-parallel</code> behind vllm-router`], ["Load", AX(64)], ["Measured", "1,898 tokens/s out"]] },
+      { pick: [0, 0, 0], nodes: [["node-a", "i5"]], at: "warm_4", before: 0, to: "load_end_4", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(4)], ["Measured", "222 tokens/s out"]] },
       { pick: [0, 2, 1], nodes: [["node-a · prefill", "i3p"], ["node-b · decode", "i3d"]], at: "warm_16", before: 0, to: "load_end_16", after: 0,
         how: [["Server", `${VL}, two servers: prefill on node-a, decode on node-b, cached context handed over the network (NixlConnector, 8 × 200 Gb/s Ethernet ports a node)`],
               ["Load", AX(16) + ", through a proxy"], ["Measured", "662 tokens/s out; almost every prompt token reached the decode server by transfer"]] }] },
 };
+// Hosts of rentals that had one node (2026-11-16, vast); the 2026-11-11 recordings came from a two-node rental.
+const ONE_NODE_RENTALS = new Set(["f7c934d6798b"]);
 const RAW_NAMES = ["Pretraining", "Inference", "Side by side"], KIND = ["pre", "inf"];
 // Side by side: any recordings, one row each (st.side), up to SIDE_MAX nodes in all (the split takes two). Clips are
 // lined up to start together and the shortest sets the length. A pretraining clip starts 30 s before training does.
@@ -416,7 +424,7 @@ const pane = (title, body, right = "", attrs = "") => `<section class="pane"${at
 function pillsRaw(on) {
   const kind = KIND[st.raw], K = kind && KINDS[kind], W = rawWorld(), c = W.cell, r0 = IDX.recs[W.nodes[0].rec];
   const clip = n => { const r = IDX.recs[n.rec]; return `${esc(n.name)}: ${mmss(n.off)} to ${mmss(n.off + W.dur)} of a ${Math.round(r.n / 60)}-minute recording, <code>${esc(r.run)}</code>`; };
-  const rows = [["Box", `${W.nodes.length > 1 ? "two nodes" : "one node"} of a two-node rental, 8 × ${esc(r0.gpu)} each, ${esc(r0.start_utc.slice(0, 10))}`],
+  const rows = [["Box", `${ONE_NODE_RENTALS.has(r0.host) ? `a one-node rental, 8 × ${esc(r0.gpu)}` : `${W.nodes.length > 1 ? "two nodes" : "one node"} of a two-node rental, 8 × ${esc(r0.gpu)} each`}, ${esc(r0.start_utc.slice(0, 10))}`],
     ...(c ? c.how : [["Recordings", "made at different times on the two nodes of one rental, lined up here to start together"]]),
     ["Clip", W.nodes.map(clip).join("<br>")], ["Readings", "last minute: 10 a second, the counters as polled and power as the mean of 2 polls. Whole clip, the lanes and the rules: 1-second means"]];
   const menu = `<details class="menu" id="how"${st.howOpen ? " open" : ""}><summary>How it was recorded</summary><div class="how">
@@ -534,7 +542,7 @@ function render() {
       ${telePane()}
       ${cls(pane("Declared workloads", `<div class="tl${live || raw ? " nolink" : ""}" id="tl"></div>`, note))}
       ${cls(pane("Rules", `<div id="rules"></div>`, note))}
-      <details class="rnote"${st.noteOpen ? " open" : ""}><summary>A note on rules</summary><p>Three simple thresholds told apart every workload I recorded, with wide margins. None of the workloads were trying to hide, so robustness is untested; but a wide margin is a good sign for a classifier that is robust enough in practice.</p></details>
+      <details class="rnote"${st.noteOpen ? " open" : ""}><summary>Note on rules</summary><p>These simple thresholds told apart every workload I recorded, with wide margins. None of the workloads were trying to hide, so robustness is untested; but a wide margin is a good sign for a classifier that is robust enough in practice.</p></details>
     </div><aside class="side">${pane("What flows where", archSVG(W))}</aside></div>`;
   bind(); paint();
 }
@@ -734,11 +742,15 @@ function ruleGraph(W, now, I) {
   const lines = W.nodes.map((n, ni) => { const on = I.judged(W, ni, now), pts = [];
     for (let i = 0; i <= N; i++) { const t = i / N * now; pts.push((i ? "L" : "M") + x(t).toFixed(1) + " " + y(nodeVal(W, ni, t, I)).toFixed(1)); }
     return `<path d="${pts.join(" ")}" fill="none" stroke="${BOXC[ni % BOXC.length]}" stroke-width="1.5" opacity="${on ? 1 : 0.3}"/>`; }).join("");
-  return `<svg class="rg" viewBox="0 0 ${Wd} ${H + 12}" preserveAspectRatio="none">
+  // the SVG stretches to the pane's width (preserveAspectRatio none), which would stretch SVG text too,
+  // so the labels are HTML laid over it, placed by percent across and px down (his note, 2026-11-12: "start" looked spread out)
+  const pc = v => (v / Wd * 100).toFixed(2) + "%";
+  return `<div class="rgw"><svg class="rg" viewBox="0 0 ${Wd} ${H + 12}" preserveAspectRatio="none">
     <rect x="${x(Math.max(0, now - 60))}" y="0" width="${x(now) - x(Math.max(0, now - 60))}" height="${H}" fill="var(--grid)" opacity=".45"/>
-    <line x1="0" y1="${H}" x2="${Wd - 44}" y2="${H}" stroke="var(--axis)"/>
-    <line x1="0" y1="${y(thr)}" x2="${Wd - 44}" y2="${y(thr)}" stroke="var(--ink)" stroke-dasharray="4 3"/><text x="${Wd - 40}" y="${y(thr) + 3}">${thr} ${I.unit}</text>${lines}
-    <text x="0" y="${H + 11}">start</text>${now > 90 ? `<text x="${x(now - 60)}" y="${H + 11}">last 60 s</text>` : ""}<text x="${x(now)}" y="${H + 11}" text-anchor="end">now</text></svg>`;
+    <line x1="0" y1="${H}" x2="${Wd - 44}" y2="${H}" stroke="var(--axis)" vector-effect="non-scaling-stroke"/>
+    <line x1="0" y1="${y(thr)}" x2="${Wd - 44}" y2="${y(thr)}" stroke="var(--ink)" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>${lines}</svg>
+    <span class="rgl" style="left:${pc(Wd - 40)};top:${y(thr).toFixed(0)}px;transform:translateY(-50%)">${thr} ${I.unit}</span>
+    <span class="rgl" style="left:0;top:${H + 2}px">start</span>${now > 90 ? `<span class="rgl" style="left:${pc(x(now - 60))};top:${H + 2}px">last 60 s</span>` : ""}<span class="rgl" style="left:${pc(x(now))};top:${H + 2}px;transform:translateX(-100%)">now</span></div>`;
 }
 function ruleDetail(W, now, k, act) {
   const I = RULE_INFO[k], badNodes = new Set(act.flatMap(v => v.gpus.map(g => +String(g).split(":")[0])));

@@ -38,6 +38,10 @@ RECS = {
     "i2": "i2-ep8-20261111T1037Z",
     "i3p": "i3-pd-2node-20261111T1123Z-prefill",
     "i3d": "i3-pd-2node-20261111T1123Z-decode",
+    # 2026-11-15/16: one vast 8x H200 node (a different rental from the above).
+    "p4": "p4-selective-b1-20261116T0604Z",
+    "i4": "i4-ep8-20261116T0619Z",
+    "i5": "i5-tp8-20261116T0716Z",
 }
 FINE_HZ = 10   # the rate of the last-minute strips: the counters' own polling rate
 AGENTX_FROM = {"i3p": "i3d"}
@@ -198,6 +202,9 @@ def summary(evals):
 def table(L):
     """What the rules say about each recording alone, one job over all 8 GPUs, by phase and declared type."""
     spansof = {"p1b": [("steps", "train_start", "train_stop")], "p2": [("steps", "train_start", "train_stop")], "p3": [("steps", "train_start", "train_stop")],
+               "p4": [("steps", "train_start", "train_stop")],
+               "i4": [("load 4", "load_4", "load_end_4"), ("warm 4", "warm_4", "load_4"), ("load 64", "load_64", "load_end_64"), ("warm 64", "warm_64", "load_64"), ("loading", "server_start", "server_ready")],
+               "i5": [("load 4", "load_4", "load_end_4"), ("warm 4", "warm_4", "load_4"), ("loading", "server_start", "server_ready")],
                "i1": [("load 16", "load_16", "load_end_16"), ("warm 16", "warm_16", "load_16"), ("load 64", "load_64", "load_end_64"), ("warm 64", "warm_64", "load_64"), ("loading", "server_start", "server_ready")],
                "i2": [("load 16", "load_16", "load_end_16"), ("warm 16", "warm_16", "load_16"), ("loading", "server_start", "server_ready")],
                "i3p": [("load 16", "load_16", "load_end_16"), ("warm 16", "warm_16", "load_16")], "i3d": [("load 16", "load_16", "load_end_16"), ("warm 16", "warm_16", "load_16")]}
