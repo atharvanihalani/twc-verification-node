@@ -30,7 +30,7 @@
   /* set like a paper (variant A, 2026-11-17): serif throughout (his ask, same day), buttons and small labels stay sans */
   .essay { font-family: "Source Serif 4", Georgia, serif; font-size: 16px; }
   .paper { text-align: center; padding: 12px 0 4px; }
-  .paper h1 { font-size: 34px; line-height: 1.18; font-weight: 600; letter-spacing: -.01em; margin: 0; }
+  .paper h1 { font-size: 38px; line-height: 1.18; font-weight: 600; letter-spacing: -.01em; margin: 0; }
   .paper .by { margin: 14px 0 0; font-size: 16px; }
   .paper .aff { margin: 0; color: var(--ink2); font-size: 14.5px; font-style: italic; }
   .paper .actions { justify-content: center; margin-top: 18px; font-family: ui-sans-serif, -apple-system, system-ui, sans-serif; }
@@ -38,9 +38,9 @@
   .btn.primary:hover { background: #2a2a28; color: var(--page); }
   .tldr { display: flex; flex-direction: column; gap: 10px; font-size: 16px; line-height: 1.6; margin: 14px 0 6px; }
   .tldr .sc { text-align: center; font: 600 11px ui-sans-serif, -apple-system, system-ui, sans-serif; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
-  @media (max-width: 600px) { .paper h1 { font-size: 26px; } .paper h1 br { display: none; } }
-  .essay h2 { font-size: 21px; line-height: 1.3; font-weight: 600; margin: 28px 0 0; }
-  .essay h3 { font-size: 17px; font-weight: 600; margin: 14px 0 0; }
+  @media (max-width: 600px) { .paper h1 { font-size: 29px; } .paper h1 br { display: none; } }
+  .essay h2 { font-size: 25px; line-height: 1.25; font-weight: 600; margin: 30px 0 0; }   /* one notch up, 2026-11-17 */
+  .essay h3 { font-size: 20px; line-height: 1.3; font-weight: 600; margin: 16px 0 0; }
   .essay p { margin: 0; }
   .essay ol, .essay ul { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
   .essay ul ul { margin-top: 4px; color: var(--ink2); }
@@ -48,7 +48,6 @@
   figure img { display: block; width: 100%; height: auto; }
   /* the draft's own placeholders, kept visible on purpose */
   .todo { background: #fff2c4; color: #6b5200; border-radius: 3px; padding: 0 3px; font-size: .92em; }
-  .essay p.label { font-weight: 600; }
   sup.fn { font-size: .72em; line-height: 0; } sup.fn a { text-decoration: none; padding: 0 1px; }
   .essay ol.notes { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--grid); font-size: 13.5px; color: var(--ink2); }
   .essay ol.notes + .foot { margin-top: 8px; border-top: 0; padding-top: 0; }
@@ -94,7 +93,7 @@
 
   <h2>Verification Architecture</h2>
   <figure><img src="/static/overview/fig-architecture.png" alt="Inside the prover (neocloud or lab), GPUs send evidence (signed telemetry) to a verification node, which sends reported information to the verification organization (government, Averi, etc.)."></figure>
-  <p class="label">Terminology</p>
+  <h3>Terminology</h3>
   <ul>
     <li>Prover: The datacenter operator who needs to prove their workloads are compliant with an AI agreement. Assumed adversarial.</li>
     <li>Verifier: The Independent Verification Organization that responsible for verifying compliance with the agreement.</li>
