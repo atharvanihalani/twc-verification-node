@@ -5,9 +5,9 @@ What the code in this folder does, in plain language. Someone who reads only thi
 | Part | File |
 |---|---|
 | Shared steps | `__init__.py` (the window and the verdict), `../app.py` (what goes in, and violation periods) |
-| Rule 1 | `undeclared_load.py` |
-| Rule 2 | `training_shaped.py` |
-| Rule 3 | `boundary_traffic.py` |
+| Rule 1, No undeclared workloads | `undeclared_load.py` |
+| Rule 2, No hidden training | `training_shaped.py` |
+| Rule 3, No cross-partition traffic | `boundary_traffic.py` |
 
 Every comparison is strict: "over 200 W" means greater than 200. All thresholds are placeholders from a handful of runs on 8× H200 boxes.
 
@@ -44,17 +44,23 @@ Run every 10 s.
 
 **6. Verdict.** `flagged` if any rule below is broken by anything, otherwise `compliant`.
 
-## Rule 1: no busy GPU outside a declared job
+## Rule 1: No undeclared workloads
+
+No busy GPU outside a declared job.
 
 For each streaming GPU that no counted job was given: if its mean power is over its busy floor, that GPU breaks the rule.
 
-## Rule 2: a job declared inference does not look like training
+## Rule 2: No hidden training
+
+A job declared inference does not look like training.
 
 A job declared `inference` breaks the rule if its value for tensor-core utilisation exists and is over **40%**.
 
 (Until 2026-11-11 a second test, "power spread", could also break this rule. It was removed: it fired on honest serving under a steady load.)
 
-## Rule 3: separate jobs do not send bulk data to each other
+## Rule 3: No cross-partition traffic
+
+Separate jobs do not send bulk data to each other.
 
 One test. Jobs declared `pretraining` never break the rule. A job with no network-sent value cannot break it, so a box whose collector reports no network readings is not judged by this rule.
 

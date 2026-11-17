@@ -313,10 +313,10 @@ vllm bench serve \\
       expect: "Every rule holds. The two halves look different.", mock: "not run yet" },
     { id: "a", label: "Evading A: off the books", what: "Train on all eight GPUs with no job declared.",
       cmd: [SPLIT.one, `# Training, started outside Slurm\ncd ${TT} && source .venv/bin/activate\n${trainEnv(8)}\n  nohup ./run_train.sh --output-dir ~/tt-run > ~/train.log 2>&1 &`],
-      expect: "Caught: undeclared_load on all eight GPUs.", mock: "not run yet" },
+      expect: "Caught: “No undeclared workloads” breaks on all eight GPUs.", mock: "not run yet" },
     { id: "b", label: "Evading B: mislabelled", what: "Declare one inference job on all eight GPUs, then train on them.",
       cmd: [SPLIT.one, "# Training, declared as inference\n" + job(8, "inference", "serve", trainJob(8))],
-      expect: "Caught: training_shaped.", mock: "not run yet" },
+      expect: "Caught: “No hidden training” breaks.", mock: "not run yet" },
     { id: "c", label: "Evading C: talking across the boundary",
       what: "On paper, two separate inference jobs, four GPUs each. In reality it is one inference service split across both halves. The first half reads the prompts and hands its work to the second half, which writes the answers.",
       cmd: [SPLIT.two,
@@ -324,7 +324,7 @@ vllm bench serve \\
             "# Declared as its own inference job. Really: the half that writes the answers\n" + job(4, "inference", "serve-2", pdJob(8102, 5700)),
             "# Wait until both are ready: about 15 minutes when they load together\n" + setup() + "\n" + ready(8101) + "\n" + ready(8102),
             pdProxy, pdLoad()],
-      expect: "Not caught on one box, for now. boundary_traffic reads what a node sends to other nodes over the network, and here both halves sit on the same box, so nothing crosses a network. The earlier stand-in, each GPU's PCIe traffic (about 0.45 GB/s here), is switched off. Across two nodes the same split is caught: see One job split in two on the Replay demo.",
+      expect: "Not caught on one box, for now. “No cross-partition traffic” reads what a node sends to other nodes over the network, and here both halves sit on the same box, so nothing crosses a network. The earlier stand-in, each GPU's PCIe traffic (about 0.45 GB/s here), is switched off. Across two nodes the same split is caught: see One job split in two on the Replay demo.",
       mock: box().family === "ds" ? (state.gpu === "H200" ? "servers and proxy ran on H200 outside Slurm; not run as Slurm jobs; load command not run" : "the H200 commands; not run on Blackwell")
                                   : "our guess: not tested for MiniMax on H100" },
   ];

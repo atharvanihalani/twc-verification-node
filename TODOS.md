@@ -9,32 +9,20 @@ Tidied 2026-11-16: open items are on top, each cut to what is still open. Finish
 2. Make the Overview clearer.
 3. Get into the classifier details: figure out what's going on and how to make it transparent and communicate it clearly.
    - Finish the remaining section of the Walkthrough and make sure it works.
-4. Scrappy IVO view.
 
 ## Replay demo and other pages
-- [ ] **Held for the next Fly deploy** (his call, 2026-11-16), local only: the Overview's footer line ("Draft written by Atharva; it will change. Open the demo →") removed from `node/static/overview.html`; a "Leave feedback on this doc ↗" button next to "Open the demo →", linking to his Google Doc (new tab). (Asked for at the same time: highlight any other `[…]` in yellow. None found: the page's only bracketed text is the two highlighted placeholders and the three `[link]` links.)
 - [ ] **(Atharva) Look over the scenario one-liner under the step-2 tabs; tweak or remove it** (his note to himself, 2026-11-12). Built by `scNote()` in `node/pages/replay.html` (about line 455) from each scenario's `blurb`, `result` and `played`; the result text comes from `make_replay_data.py` (about line 245).
-- [ ] **Rename the rules** (his ask, 2026-11-12). `undeclared_load`, `training_shaped`, `boundary_traffic` read like code identifiers. They appear in the Rules pane, the diagram's report line, the timeline tooltips, `rules.md`, the rule files and `make_replay_data.py` (scenario `expect`): rename in one pass and regenerate the replay data.
-- [ ] **Clicking a rule to open it is unreliable** (his report, 2026-11-12, Fly v40). Likely cause [I]: `paint()` rebuilds the Rules pane's HTML every 200 ms, so a click whose press and release fall either side of a rebuild is dropped. Try toggling on `pointerdown`, or rebuild a row only when its text changes.
-- [ ] **Click a rule to see what it's reading right now** (his ask, 2026-11-11). The old page's `training_shaped` sub-rows in `parked-pages/replay-live.html` are a starting point.
-- [ ] **Bring back the "Slurm table as reported" dropdown** (his ask, 2026-11-11): the scheduler's raw output with the time it was received, collapsed by default. Code in `parked-pages/replay-live.html`.
 - [ ] **(Atharva) Look at the "What flows where" diagram and update it** (his note, 2026-11-11). `archSVG()` in `node/pages/replay.html`.
-- [ ] **(Atharva) For each evasion case, give a concrete example of why evading it would be bad** (his note, 2026-11-11). His example: an agreement limits the size of models you can serve, so the verifier monitors and limits communication between pods.
-- [ ] A toggle between checking conformance (declarations against telemetry, rules on) and just showing telemetry.
 - [ ] Say on the page that Evading C only works because the one-box Slurm has no cgroups.
 - [ ] **No page shows a connected box's declarations and rule results.** The page that did is parked at `parked-pages/replay-live.html` (to restore: move it to `node/static/replay.html` and return `page("replay.html")` from `/replay`). Debug still shows live telemetry. Meanwhile the Walkthrough's two Replay-demo links (`node/static/walkthrough.html`, about lines 93 and 113) land on recordings, not the reader's box: point them at Debug, or fix by wiring the page (his call 2026-11-11: saved for later).
-- [ ] **Re-add the IVO view** (parked 2026-11-11). First build the verdicts-only view on the live path; the parked `parked-pages/ivo.html` still shows the old signed-prover path. To restore: move it to `node/static/ivo.html`, then the `/ivo` route in `node/app.py` and one line in `node/static/nav.js`, both marked with a comment.
-- [ ] **Before publishing:** a changelog on the Overview page (dated log, as in canvas layout D).
 - [ ] Fill the essay's placeholders: `[link]` (established convention), `[add links]` (side channels), `[insert img?]` (declared-workload graph), `[_____ add]` (how the rules work). The Overview carries the same ones.
 - [ ] **Walkthrough password line** (step 1 now says "the same one you used to log in"): have the server fill it in for logged-in users, or drop the line.
 - [ ] List all the NVML fields we poll, and how often.
-- [ ] **Link to the code on GitHub in more places, for transparency** (his ask, 2026-11-16), so readers can check things for themselves: each rule in the Rules pane → its file in `node/rules/` and the plain-language `rules.md`; each workload → the commands and recipe that ran it (`setup.py`, `workloads/`); the collector; `make_replay_data.py`. Only the Walkthrough links to GitHub today. The scripts that made the recordings (`rec.sh`, `extras.py`, in `telemetry-logs/serving-traces-vllm/`) are not in the repo, so they would need adding first.
 - Parked pages, not online: earlier mock stages in `parked-pages/mock-stages/` (trash once the design is final); the old signed-prover page `parked-pages/node.html` (`/node` redirects to the Replay demo; `/api/state` is still in `node/app.py`).
 
 ## Recordings
-- [ ] **Still missing from his knob list:** the two-node prefill/decode split at more than one concurrency, and with long cold prompts; a prefill/decode split on one node; MiniMax M3.1 Flash and Qwen 3.8 Flash; other GPU types (H100, B200, B300, shown as labels).
+- [ ] **Still missing from his knob list:** other GPU types (H100, B200, B300, shown as labels).
 - [ ] **4-bit redo** (his ask, 2026-11-11). First check what DeepSeek V4.1 Flash already is: its experts ship as MXFP4, so part of it is 4-bit already.
-- [ ] Record the Slurm job table when a run goes through Slurm (the one item from the "capture more" list that `extras.py` + `rec.sh` don't cover).
 
 ## Walkthrough and `setup.py`
 - [ ] **Run every Walkthrough command on a real 8× H200 box, `setup.py` end to end.**
@@ -72,12 +60,8 @@ Direction (his, 2026-11-10): skip finicky statistical measures; prefer clean dec
   - The 0.001 GB/s limit comes from one split at 16 sessions and four honest runs; storage traffic over the same ports would trip it.
   - Receivers aren't named; only the sending job is flagged.
   - If PCIe comes back: restore test 2 in `rules.md` and the `range(len(jobs))` loop in `test_spec.py`; its Blackwell numbers (0.01 GB/s honest on B200) are untested with a hand-off.
-- [ ] **Thresholds per GPU type (deprioritised, his call 2026-11-10).** Tensor cores (45%): probably portable. Busy floor: Blackwell gets 300 W; still check a B200 with DeepSeek loaded and waiting (240–252 W seen with a model loaded) and a B300 with any model loaded; a share of the card's power limit would be the general form. The 400 W hot gate has the same issue (H200 cap 700 W, B200 1,000 W).
 - [ ] FSDP training at about 187 W slips under the 200 W busy gate. Related: the prefill node of the two-node split averages under the floor most of the time.
-- [ ] Violation intervals lag the load by up to about 60 s (60 s window).
-- [ ] Nanochat's 5.4 s rhythm shows only weakly in 10 Hz power on one GPU (r = 0.28). Check all 8 GPUs and whether `training_shaped` fires on it.
 - [ ] Consider a rule that shows training happened even while disconnected (energy counters).
-- [ ] The parked recorded replay (`make_scenario.py`, `replays/scenario-1.json`) carries the old rule name and correlation rule; regenerate or drop it before turning recorded mode back on.
 
 ## Pipeline
 - [ ] systemd install mode is untested (no systemd box yet).
@@ -91,6 +75,8 @@ Direction (his, 2026-11-10): skip finicky statistical measures; prefer clean dec
 - Open-source license for the repo (shelved 2026-11-12, his call). MIT or Apache-2.0 (Apache adds a patent grant); until then the public code is "all rights reserved" by default.
 
 ## Done and history
+- [x] **Done 2026-11-17, local, not deployed:** rules renamed for readers (No undeclared workloads / No hidden training / No cross-partition traffic: `TITLE` in each rule file, `rules.md` headings, the page, the Walkthrough, scenario verdict text; code names unchanged); rule rows no longer rebuilt every paint (clicks were dropped); "Slurm table as reported" back under the timeline in step 2 as a mock-up (squeue layout, built from each scenario's declarations, refreshed on the reporter's 5 s beat); GitHub links on each rule (code + `rules.md`), in "How it was recorded" (server script / recipe, `rec.sh`, logger, `make_replay_data.py`), under each scenario and in "Add your GPUs". The recording scripts are now in the repo at `recording/`. The links to `recording/` and the new `rules.md` anchors only work once pushed.
+
 Finished entries, and the full text behind items trimmed above, in their original wording and order. `[ ]` entries that moved here are marked *(history)*; their open parts are above.
 
 - [x] *(shipped with the 2026-11-16 deploy.)* **Held for the next Fly deploy** (his call, 2026-11-12: "lets batch it"), all in `node/pages/replay.html`, checked locally: rule-graph labels ("start", "now", "last 60 s", the limit) are HTML over the graph, so they no longer stretch sideways; "A note on rules" → "Note on rules"; "Three simple thresholds" → "These simple thresholds".

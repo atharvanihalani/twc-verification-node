@@ -231,12 +231,13 @@ def outcome(sc, ev):
     mmss = lambda t: f"{int(t) // 60}:{int(t) % 60:02d}"
     truth, expect, out = {j["id"]: j["truth"] for j in sc["jobs"]}, sc["expect"], []
     liar = lambda v: any(truth[i] != "inference" for i in v["jobs"])
+    title = lambda r: f"Rule “{rules.RULE_TITLE[r]}”"
     hit = [v for v in sc["viol"] if v["rule"] == expect and (expect != "training_shaped" or liar(v))]
     if expect and hit:
         again = len(hit) - 1
-        out.append({"kind": "caught", "text": f"{expect} breaks {mmss(hit[0]['a'])} in" + (f", then lets go and breaks again {again} time{'s' if again > 1 else ''}" if again else "") + "."})
+        out.append({"kind": "caught", "text": f"{title(expect)} breaks {mmss(hit[0]['a'])} in" + (f", then lets go and breaks again {again} time{'s' if again > 1 else ''}" if again else "") + "."})
     elif expect:
-        text = f"{expect} never breaks."
+        text = f"{title(expect)} never breaks."
         if expect == "boundary_traffic":
             top = max(q.get("net_sent", 0) for _, r in ev if r["status"] != "warming_up" for q in r["features"]["jobs"].values() if q["type"] == "inference")
             text += f" The most either job sends to other nodes is {top:.4f} GB/s (60 s mean); the limit is {rules.boundary_traffic.NET_SENT_GB_S}."
@@ -245,10 +246,10 @@ def outcome(sc, ev):
     for job in sorted({i for v in false for i in v["jobs"]}):
         mine = [v for v in false if job in v["jobs"]]
         total = sum(min(v["b"], sc["dur"]) - v["a"] for v in mine)
-        out.append({"kind": "false alarm", "text": f"training_shaped breaks on job {job}, which really is inference, for {total:.0f} s in all ({mine[0]['d'][0][1].split(': ', 1)[1]})."})
+        out.append({"kind": "false alarm", "text": f"{title('training_shaped')} breaks on job {job}, which really is inference, for {total:.0f} s in all ({mine[0]['d'][0][1].split(': ', 1)[1]})."})
     for v in sc["viol"]:
         if v not in hit and v not in false and not any(q["kind"] == "also" and q["rule"] == v["rule"] for q in out):
-            out.append({"kind": "also", "rule": v["rule"], "text": f"{v['rule']} breaks {mmss(v['a'])} in ({v['d'][-1][1]})."})
+            out.append({"kind": "also", "rule": v["rule"], "text": f"{title(v['rule'])} breaks {mmss(v['a'])} in ({v['d'][-1][1]})."})
     return out or [{"kind": "holds", "text": "All three rules hold from start to end."}]
 
 

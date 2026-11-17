@@ -1,10 +1,10 @@
 """The rules: one file each, plus this orchestrator.
 
-    undeclared_load.py    1. no busy GPU outside a declared job
-    training_shaped.py    2. a job declared inference does not look like training
-    boundary_traffic.py   3. separate jobs do not send bulk data to each other
+    undeclared_load.py    1. No undeclared workloads: no busy GPU outside a declared job
+    training_shaped.py    2. No hidden training: a job declared inference does not look like training
+    boundary_traffic.py   3. No cross-partition traffic: separate jobs do not send bulk data to each other
 
-Every rule file has the same shape: NAME, TEXT (one sentence for the page), its thresholds, and
+Every rule file has the same shape: NAME (the code's name), TITLE (the readable one), TEXT (one sentence for the page), its thresholds, and
 check(window), which returns a list of hits {rule, gpus, jobs, detail}.
 The rules read two kinds of data: power (about ten readings a second, laid on a shared grid; it decides
 which GPUs and jobs are busy) and once-a-second readings of other counters ("pcie_sent", "tensor_util"),
@@ -22,6 +22,7 @@ from . import boundary_traffic, training_shaped, undeclared_load
 
 RULES = (undeclared_load, training_shaped, boundary_traffic)
 RULE_TEXT = {r.NAME: r.TEXT for r in RULES}
+RULE_TITLE = {r.NAME: r.TITLE for r in RULES}   # readable names, for anything a person reads
 
 WINDOW_S = 60.0        # the rules look at the trailing minute
 GRID_S = 0.1           # power readings are laid on a grid of this step

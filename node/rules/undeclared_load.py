@@ -9,6 +9,7 @@ loaded and waiting. A B200 draws about 190 W with nothing loaded and about 250 W
 and waiting; an idle B300 about 180 W.
 """
 NAME = "undeclared_load"
+TITLE = "No undeclared workloads"   # what the page and the docs call it
 BUSY_W = 200.0             # Hopper and anything unrecognised
 BUSY_W_BLACKWELL = 300.0   # B200, B300 (and GB200, GB300)
 TEXT = (f"A GPU averages > {BUSY_W:.0f} W ({BUSY_W_BLACKWELL:.0f} W on Blackwell) "

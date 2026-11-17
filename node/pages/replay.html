@@ -154,11 +154,20 @@
   #app .compact .boxes { margin: 0; }
   #app .box .st, #app .box .pill { display: none; }   /* no "recording" / "streaming" notes beside each node */
 
+  /* "Slurm table as reported", under the timeline in step 2, closed by default */
+  details.sacct { margin-top: 10px; border-top: 1px solid var(--grid); padding-top: 8px; }
+  details.sacct summary { cursor: pointer; font-size: 13px; color: var(--ink2); list-style: none; }
+  details.sacct summary::-webkit-details-marker { display: none; }
+  details.sacct summary::after { content: " ▾"; font-size: 10px; } details.sacct[open] summary::after { content: " ▴"; }
+  details.sacct .sub { color: var(--muted); font-size: 12px; }
+  details.sacct pre { font: 11.5px/1.55 ui-monospace, Menlo, monospace; background: var(--page); border: 1px solid var(--ring); padding: 8px 10px; margin: 8px 0 0; overflow-x: auto; }
+
   /* rules */
   .rule { display: grid; grid-template-columns: 14px 180px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--grid); }
   .ritem:first-child .rule { padding-top: 2px; } .ritem:last-child:not(.open) .rule { border-bottom: 0; padding-bottom: 0; }
   .rule .dot { width: 9px; height: 9px; border-radius: 50%; margin: 0; }
-  .rname { font: 13px ui-monospace, Menlo, monospace; }
+  .rname { font-size: 13.5px; font-weight: 600; }
+  .rcode { font-size: 13px; } .rcode a, .scnote a, .how a, .step a { color: var(--s1); }
   .rtext { font-size: 13.5px; }
   .rule .pill { font-size: 12px; padding: 1px 9px; border-radius: 0; white-space: nowrap; }
   /* a rule opens (his design, 2026-11-12): Rule = one question, Why = two lines, Right now = per node; then one small
@@ -244,17 +253,29 @@ const DATA = "/static/replay-data/", REC = {}, REC10 = {}, asked = {};
 let IDX = null;
 function need(W) { for (const n of W.nodes) if (n.rec) for (const [sfx, store] of [["", REC], [".hz10", REC10]])
   if (!asked[n.rec + sfx]) { asked[n.rec + sfx] = 1; fetch(DATA + n.rec + sfx + ".json").then(r => r.json()).then(d => { store[n.rec] = d; paint(); }); } }
-const RULES = [["undeclared_load", "No busy GPU outside a declared job"],
-               ["training_shaped", "Inference jobs don't look like training"],
-               ["boundary_traffic", "Separate jobs don't send bulk data to each other"]];
+// The rules: code name (what the rule engine and the data call it), readable title (TITLE in node/rules/*.py),
+// a short form for tight spots (the diagram's report, labels over the timeline), one line, and its heading in rules.md.
+const RULES = [["undeclared_load", "No undeclared workloads", "undeclared workload", "No busy GPU outside a declared job", "rule-1-no-undeclared-workloads"],
+               ["training_shaped", "No hidden training", "hidden training", "Inference jobs don't look like training", "rule-2-no-hidden-training"],
+               ["boundary_traffic", "No cross-partition traffic", "cross-partition traffic", "Separate jobs don't send bulk data to each other", "rule-3-no-cross-partition-traffic"]];
+const RTITLE = Object.fromEntries(RULES.map(r => [r[0], r[1]])), RSHORT = Object.fromEntries(RULES.map(r => [r[0], r[2]]));
+// The code on GitHub, linked from the page so readers can check things for themselves (his ask, 2026-11-16)
+const GH = "https://github.com/atharvanihalani/twc-verification-node/blob/main/";
+const ghA = (path, text) => `<a href="${GH}${path}" target="_blank" rel="noopener">${text || path.split("#")[0].split("/").pop()} ↗</a>`;
 
 // Step 1: which recording plays is chosen with levers. A cell is one recorded combination: pick = the option chosen
 // in each lever, nodes = the recording on each node. A clip runs from the mark `at` (`before` seconds earlier) to the
 // mark `to` (`after` seconds later); with neither, it is the whole recording. index.json lists each recording's marks
 // (server_start, server_ready, warm_16, load_16, load_end_16, ...).
-// A serving clip is that concurrency's own run: the load generator's cache warm-up, then the 15 minutes of measured
-// load. Server loading and any other concurrency in the same recording are left out (no margins: 16 and 64 sit
-// 14 s apart in one recording, so a margin would show the neighbour).
+// A serving clip is that concurrency's own run: the last WARM_S seconds of the load generator's cache warm-up, then
+// the 15 minutes of measured load. Server loading and any other concurrency in the same recording are left out.
+// The warm-ups ran 28 s to 434 s (fewer sessions, less cache to fill) and are flat, prefill-only, about 640 W; every
+// serving clip opens with the same WARM_S seconds, matching the 30 s of idle before training starts (his ask,
+// 2026-11-17). A warm-up shorter than that (i5 at 4 sessions, 28 s) opens on a few seconds of the idle server instead.
+const WARM_S = 30;
+// wording his, 2026-11-17
+const warmText = w => w > WARM_S ? `It ran ${w} s here and is trimmed to its last ${WARM_S} s`
+  : `It ran ${w} s here, so the clip opens on ${WARM_S - w} s of the idle server before it`;
 const TT = "TorchTitan, Llama 3 8B, one job on all 8 GPUs, sequence length 8,192", AX = n => `AgentX replaying recorded Claude Code sessions, ${n} at once`;
 const VL = "vLLM 0.33.0, DeepSeek V4.1 Flash";
 const KINDS = {
@@ -276,13 +297,13 @@ const KINDS = {
       { label: "Layout", opts: ["tensor-parallel", "expert-parallel", "prefill and decode split, two nodes"] },
       { label: "Concurrency", opts: ["4", "16", "64"] }],
     cells: [
-      { pick: [0, 0, 1], nodes: [["node-a", "i1"]], at: "warm_16", before: 0, to: "load_end_16", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(16)], ["Measured", "660 tokens/s out"]] },
-      { pick: [0, 0, 2], nodes: [["node-a", "i1"]], at: "warm_64", before: 0, to: "load_end_64", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(64)], ["Measured", "1,802 tokens/s out"]] },
-      { pick: [0, 1, 1], nodes: [["node-a", "i2"]], at: "warm_16", before: 0, to: "load_end_16", after: 0, how: [["Server", `${VL}, <code>--data-parallel-size 8 --enable-expert-parallel</code> behind vllm-router`], ["Load", AX(16)], ["Measured", "652 tokens/s out"]] },
-      { pick: [0, 1, 0], nodes: [["node-a", "i4"]], at: "warm_4", before: 0, to: "load_end_4", after: 0, how: [["Server", `${VL}, <code>--data-parallel-size 8 --enable-expert-parallel</code> behind vllm-router`], ["Load", AX(4)], ["Measured", "197 tokens/s out"]] },
-      { pick: [0, 1, 2], nodes: [["node-a", "i4"]], at: "warm_64", before: 0, to: "load_end_64", after: 0, how: [["Server", `${VL}, <code>--data-parallel-size 8 --enable-expert-parallel</code> behind vllm-router`], ["Load", AX(64)], ["Measured", "1,898 tokens/s out"]] },
-      { pick: [0, 0, 0], nodes: [["node-a", "i5"]], at: "warm_4", before: 0, to: "load_end_4", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(4)], ["Measured", "222 tokens/s out"]] },
-      { pick: [0, 2, 1], nodes: [["node-a · prefill", "i3p"], ["node-b · decode", "i3d"]], at: "warm_16", before: 0, to: "load_end_16", after: 0,
+      { pick: [0, 0, 1], nodes: [["node-a", "i1"]], at: "load_16", before: WARM_S, to: "load_end_16", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(16)], ["Measured", "660 tokens/s out"]] },
+      { pick: [0, 0, 2], nodes: [["node-a", "i1"]], at: "load_64", before: WARM_S, to: "load_end_64", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(64)], ["Measured", "1,802 tokens/s out"]] },
+      { pick: [0, 1, 1], nodes: [["node-a", "i2"]], at: "load_16", before: WARM_S, to: "load_end_16", after: 0, how: [["Server", `${VL}, <code>--data-parallel-size 8 --enable-expert-parallel</code> behind vllm-router`], ["Load", AX(16)], ["Measured", "652 tokens/s out"]] },
+      { pick: [0, 1, 0], nodes: [["node-a", "i4"]], at: "load_4", before: WARM_S, to: "load_end_4", after: 0, how: [["Server", `${VL}, <code>--data-parallel-size 8 --enable-expert-parallel</code> behind vllm-router`], ["Load", AX(4)], ["Measured", "197 tokens/s out"]] },
+      { pick: [0, 1, 2], nodes: [["node-a", "i4"]], at: "load_64", before: WARM_S, to: "load_end_64", after: 0, how: [["Server", `${VL}, <code>--data-parallel-size 8 --enable-expert-parallel</code> behind vllm-router`], ["Load", AX(64)], ["Measured", "1,898 tokens/s out"]] },
+      { pick: [0, 0, 0], nodes: [["node-a", "i5"]], at: "load_4", before: WARM_S, to: "load_end_4", after: 0, how: [["Server", `${VL}, one server, <code>--tensor-parallel-size 8</code>`], ["Load", AX(4)], ["Measured", "222 tokens/s out"]] },
+      { pick: [0, 2, 1], nodes: [["node-a · prefill", "i3p"], ["node-b · decode", "i3d"]], at: "load_16", before: WARM_S, to: "load_end_16", after: 0,
         how: [["Server", `${VL}, two servers: prefill on node-a, decode on node-b, cached context handed over the network (NixlConnector, 8 × 200 Gb/s Ethernet ports a node)`],
               ["Load", AX(16) + ", through a proxy"], ["Measured", "662 tokens/s out; almost every prompt token reached the decode server by transfer"]] }] },
 };
@@ -336,6 +357,9 @@ function metric(W, n, g, t, key, fine) {
   return (r.s[key][g] || r.s[key][0])[Math.max(0, Math.min(r.n * hz - 1, Math.floor((t + nd.off) * hz)))] / IDX.scale[key];
 }
 const gpuName = W => W.fake ? "B200" : IDX.recs[W.nodes[0].rec].gpu;
+// The Telemetry pane's label beside each node: what it is and what it was really running (his ask, 2026-11-17: friends
+// couldn't tell which node trains). Every recording is one or the other; recording ids start p (pretraining) or i (inference).
+const nodeLabel = (W, n) => `${n.gpus} × ${gpuName(W)}` + (n.rec ? (n.rec[0] === "p" ? " (pretraining)" : " (inference)") : "");
 // the power axis of the lanes: Blackwell cards reach 1 kW, Hopper cards 700 W
 const laneScale = W => /B[23]00/.test(gpuName(W)) ? { max: 1300, grid: 1000, label: "1 kW", busy: 300 } : { max: 800, grid: 500, label: "500 W", busy: 200 };
 // what the recording was doing t seconds into the clip, from its own marks and the trainer's log
@@ -363,7 +387,7 @@ function teleWhole(W) {
   if (_zt.sig === sig) return _zt.out;
   const out = {}, N = Math.min(400, W.dur), step = W.dur / N;
   W.nodes.forEach((n, ni) => {
-    const h = { slot: ni, label: `${n.gpus} × ${gpuName(W)}`, replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} }, r = REC[n.rec];
+    const h = { slot: ni, label: nodeLabel(W, n), replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} }, r = REC[n.rec];
     for (const k of KEYS) { h.mean[k] = [];
       for (let g = 0; g < n.gpus; g++) { (h.gpus[g] = h.gpus[g] || {})[k] = []; }
       for (let i = 0; i <= N; i++) { let a = 0;
@@ -378,7 +402,7 @@ function teleWhole(W) {
 function teleData(list) {
   const out = {}; let slot = 0;
   for (const { W, t, live } of list) W.nodes.forEach((n, ni) => {
-    const h = { slot: slot++, label: `${n.gpus} × ${gpuName(W)}`, replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} };
+    const h = { slot: slot++, label: nodeLabel(W, n), replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} };
     for (const k of KEYS) h.mean[k] = [];
     for (let g = 0; g < n.gpus; g++) { h.gpus[g] = {}; for (const k of KEYS) h.gpus[g][k] = []; }
     const hz = !W.fake && REC10[n.rec] ? 10 : 1, t1 = Math.floor(t * hz) / hz;   // one point per stored reading, on its own time
@@ -411,7 +435,7 @@ const TYPE = { inference: "#2a78d6", pretraining: "#3f8f5b" }, RED = "#d03b3b", 
 // ---------------------------------------------------------------- state
 // Settled so far: square panels, a Readings menu, and two steps (see the telemetry first, then check it).
 const st = { mode: "raw" /* raw = step 1 | check = step 2 */, raw: 0, pick: { pre: [0, 0], inf: [0, 0, 1] },
-             side: [{ k: "inf", pick: [0, 0, 1] }, { k: "pre", pick: [0, 0] }], ruleOpen: new Set(), noteOpen: false, seg: null /* open menu in Side by side: "row:level" */, zoom: false, howOpen: false, sc: 1, now: 0, paused: false, speed: 12, hold: 0,
+             side: [{ k: "inf", pick: [0, 0, 1] }, { k: "pre", pick: [0, 0] }], ruleOpen: new Set(), noteOpen: false, sacctOpen: false, seg: null /* open menu in Side by side: "row:level" */, zoom: false, howOpen: false, sc: 1, now: 0, paused: false, speed: 12, hold: 0,
              strips: new Set(["power", "hbm_bw", "nvlink"]), menuOpen: false, box: "none", connectedAt: 0, src: "rec", addOpen: false };
 const isLive = () => st.box === "connected" && st.src === "live";
 const world = () => st.mode === "raw" ? rawWorld() : IDX.scenarios[st.sc];
@@ -424,9 +448,18 @@ const pane = (title, body, right = "", attrs = "") => `<section class="pane"${at
 function pillsRaw(on) {
   const kind = KIND[st.raw], K = kind && KINDS[kind], W = rawWorld(), c = W.cell, r0 = IDX.recs[W.nodes[0].rec];
   const clip = n => { const r = IDX.recs[n.rec]; return `${esc(n.name)}: ${mmss(n.off)} to ${mmss(n.off + W.dur)} of a ${Math.round(r.n / 60)}-minute recording, <code>${esc(r.run)}</code>`; };
+  const code = c ? (kind === "pre" ? [ghA("setup.py#L110", "TorchTitan recipe (setup.py)"), ghA("recording/rec.sh", "rec.sh (train_run)")]
+      : [...new Set(c.nodes.map(([, rec]) => ({ i1: "tp8", i5: "tp8", i2: "ep8", i4: "ep8", i3p: "pd_prefill", i3d: "pd_decode" })[rec]))].map(f => ghA(`recording/server/${f}.sh`))
+          .concat(c.nodes.length > 1 ? [ghA("recording/pd.sh")] : [], [ghA("recording/rec.sh", "rec.sh (serve_run)")]))
+    : [ghA("recording/README.md", "recording scripts")];
   const rows = [["Box", `${ONE_NODE_RENTALS.has(r0.host) ? `a one-node rental, 8 × ${esc(r0.gpu)}` : `${W.nodes.length > 1 ? "two nodes" : "one node"} of a two-node rental, 8 × ${esc(r0.gpu)} each`}, ${esc(r0.start_utc.slice(0, 10))}`],
     ...(c ? c.how : [["Recordings", "made at different times on the two nodes of one rental, lined up here to start together"]]),
-    ["Clip", W.nodes.map(clip).join("<br>")], ["Readings", "last minute: 10 a second, the counters as polled and power as the mean of 2 polls. Whole clip, the lanes and the rules: 1-second means"]];
+    // the trimmed warm-up, said where the recording is described (his ask, 2026-11-17)
+    ...((c ? kind === "inf" : st.side.some(s => s.k === "inf")) ? [["Warm-up", "before the measured load, the load generator fills the server’s cache: long prompts in, one token out. " +
+      (c ? warmText(Math.round(IDX.recs[c.nodes[0][1]].mark[c.at] - IDX.recs[c.nodes[0][1]].mark[c.at.replace("load_", "warm_")]))
+          : `Each serving clip keeps its last ${WARM_S} s`)]] : []),
+    ["Clip", W.nodes.map(clip).join("<br>")], ["Readings", "last minute: 10 a second, the counters as polled and power as the mean of 2 polls. Whole clip, the lanes and the rules: 1-second means"],
+    ["Code", code.concat([ghA("recording/logger.py"), ghA("recording/extras.py"), ghA("make_replay_data.py", "make_replay_data.py (recording → this page)")]).join(" · ")]];
   const menu = `<details class="menu" id="how"${st.howOpen ? " open" : ""}><summary>How it was recorded</summary><div class="how">
       ${rows.map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("")}<span><a href="/walkthrough">Run it yourself →</a></span></div></details>`;
   const has = (L, i, exact) => K.cells.some(q => q.pick[L] === i && (!exact || q.pick.every((v, j) => j === L || v === st.pick[kind][j])));
@@ -460,7 +493,7 @@ function pickLever(L, i) {
   if (best) { st.pick[kind] = [...best.pick]; st.now = 0; st.paused = false; render(); }
 }
 const KWORD = { caught: "Caught.", missed: "Missed.", "false alarm": "False alarm.", also: "Also:", holds: "" };
-const scNote = sc => `<p class="scnote"><b>${esc(sc.blurb)}</b> ` + sc.result.map(q => `<span class="k-${q.kind.split(" ")[0]}">${KWORD[q.kind]}</span> ${esc(q.text)}`).join(" ") + ` <span class="played">Playing: ${esc(sc.played)}.</span></p>`;
+const scNote = sc => `<p class="scnote"><b>${esc(sc.blurb)}</b> ` + sc.result.map(q => `<span class="k-${q.kind.split(" ")[0]}">${KWORD[q.kind]}</span> ${esc(q.text)}`).join(" ") + ` <span class="played">Playing: ${esc(sc.played)}. Verdicts from the real rules, run over the recordings by ${ghA("make_replay_data.py")}.</span></p>`;
 const pillsSC = on => `<div class="pills">${IDX.scenarios.map((s, i) => `<button data-sc="${i}" class="${on && !isLive() && i === st.sc ? "on" : ""}">${esc(s.name)}</button>`).join("")}` +
   (st.box === "connected" ? `<button data-src="live" class="${isLive() ? "on" : ""}"><span class="livedot"></span>your-box</button>` : "") + `</div>` + (isLive() ? "" : scNote(IDX.scenarios[st.sc]));
 const transport = () => isLive() ? "" : `<div class="transport"><button class="playbtn" id="play"></button><span class="time" id="ttime"></span>
@@ -479,7 +512,7 @@ function steps() {
   return `<div class="steps">
     <div class="step"><span class="n">1</span><div><b>Rent a box with NVIDIA GPUs</b><p>Allow about an hour the first time; most of it is downloads.</p></div></div>
     <div class="step"><span class="n">2</span><div><b>Run this on the box</b><pre>curl -fsSu :$P https://twc-verification-node.fly.dev/setup.py -o /tmp/setup.py &amp;&amp; python3 /tmp/setup.py</pre>
-      <p><a href="/walkthrough">Full walkthrough</a></p></div></div>
+      <p><a href="/walkthrough">Full walkthrough</a> · code: ${ghA("setup.py")} · ${ghA("collector.py")}</p></div></div>
     <div class="step"><span class="n">3</span><div>${s3}</div></div></div>`;
 }
 
@@ -518,7 +551,7 @@ function paintArch(W, now) {
   root.classList.toggle("rawmode", !!W.raw); root.classList.toggle("paused", st.paused && !isLive());
   $("#a-node").textContent = W.raw ? "collecting telemetry" : warm ? "warming up" : nbad ? `${nbad} of 3 rules broken` : "3 rules hold";
   // the report: one broken rule per line, so three names fit beside the arrow
-  const rep = $("#a-rep"), lines = W.raw || warm ? ["nothing yet"] : nbad ? [...new Set(bad.map(v => v.rule))] : ["all rules hold"];
+  const rep = $("#a-rep"), lines = W.raw || warm ? ["nothing yet"] : nbad ? [...new Set(bad.map(v => RSHORT[v.rule]))] : ["all rules hold"];
   rep.innerHTML = lines.map((q, i) => `<tspan x="160" dy="${i ? 11 : 0}">${q}</tspan>`).join("");
   rep.style.fill = W.raw || warm ? css("--muted") : bad.length ? RED : css("--good");
   const nj = W.jobs.filter(j => j.start <= now).length; $("#a-jobs").textContent = `${nj} job${nj === 1 ? "" : "s"} declared`;
@@ -540,7 +573,7 @@ function render() {
       ${transport()}
       ${st.addOpen ? pane("Add your own GPUs", steps(), `<button class="btn quiet" data-act="add">✕</button>`) : ""}
       ${telePane()}
-      ${cls(pane("Declared workloads", `<div class="tl${live || raw ? " nolink" : ""}" id="tl"></div>`, note))}
+      ${cls(pane("Declared workloads", `<div class="tl${live || raw ? " nolink" : ""}" id="tl"></div>` + (raw || live ? "" : `<details class="sacct" id="sacct"${st.sacctOpen ? " open" : ""}><summary>Slurm table as reported <span class="sub" id="sacctsub"></span></summary><pre id="sacctpre"></pre></details>`), note))}
       ${cls(pane("Rules", `<div id="rules"></div>`, note))}
       <details class="rnote"${st.noteOpen ? " open" : ""}><summary>Note on rules</summary><p>These simple thresholds told apart every workload I recorded, with wide margins. None of the workloads were trying to hide, so robustness is untested; but a wide margin is a good sign for a classifier that is robust enough in practice.</p></details>
     </div><aside class="side">${pane("What flows where", archSVG(W))}</aside></div>`;
@@ -550,6 +583,7 @@ function bind() {
   const on = (sel, f, ev = "onclick") => document.querySelectorAll(sel).forEach(b => b[ev] = e => f(b, e));
   on("[data-lev]", b => pickLever(+b.dataset.lev, +b.dataset.i));
   const rn = $("details.rnote"); if (rn) rn.ontoggle = () => { st.noteOpen = rn.open; };
+  const sa = $("#sacct"); if (sa) sa.ontoggle = () => { st.sacctOpen = sa.open; };
   const rl = $("#rules"); if (rl) rl.onclick = e => { const r = e.target.closest("[data-rule]"); if (!r) return; const k = r.dataset.rule;
     st.ruleOpen.has(k) ? st.ruleOpen.delete(k) : st.ruleOpen.add(k); paint(); };
   on("[data-sseg]", b => { st.seg = st.seg === b.dataset.sseg ? null : b.dataset.sseg; render(); });
@@ -678,7 +712,7 @@ function paintTL(el, W, now) {
       if (el._hover === key) top += `<rect x="${a + .5}" y="${y0 + .5}" width="${Math.max(b - a - 1, 1)}" height="${LANE - 1}" fill="none" stroke="${c}" stroke-width="1.2"/>`;
       hits.push({ key, x0: a, x1: b, y0, y1: y0 + LANE, html: `<b>Job ${j.id} · ${esc(j.name)}</b><br>
         <span class="m">started ${when(W, j.start, now)} · time limit ${when(W, j.limit, now)}</span>` +
-        jv.filter(v => activeV(v, now)).map(v => `<br><span class="bad">${v.rule} broken for ${dur(now - v.a)}</span><br><span class="m">${esc(textV(v, now))}</span>`).join("") +
+        jv.filter(v => activeV(v, now)).map(v => `<br><span class="bad">${RTITLE[v.rule]} broken for ${dur(now - v.a)}</span><br><span class="m">${esc(textV(v, now))}</span>`).join("") +
         (was ? `<br><span class="m">a rule broke and held again ${was} time${was > 1 ? "s" : ""} before now</span>` : "") });
     }
     // measured power: a very light line for every GPU, and the lane's mean in dark on top
@@ -695,16 +729,16 @@ function paintTL(el, W, now) {
       s += `<rect x="${va}" y="${y0}" width="${w}" height="${LANE}" fill="${RED}" fill-opacity="0.12"/><rect x="${va}" y="${y0}" width="${w}" height="${LANE}" fill="url(#${el.id}-vh)"/>
             <line x1="${va}" y1="${y0}" x2="${va + w}" y2="${y0}" stroke="${RED}" stroke-width="2"/>`;
       // the rule's name above the stretch, unless it would run into the name before it (hover shows the details)
-      if (va > labelEnd) { const name = v.rule + (all ? "" : ` · GPU ${Math.min(...mine)}–${Math.max(...mine)}`);
-        s += `<text x="${va + 1}" y="${y0 - 4}" ${MONO} font-size="10" fill="${RED}">${name}</text>`; labelEnd = va + name.length * 6.2 + 8; }
+      if (va > labelEnd) { const name = RTITLE[v.rule] + (all ? "" : ` · GPU ${Math.min(...mine)}–${Math.max(...mine)}`);
+        s += `<text x="${va + 1}" y="${y0 - 4}" font-size="10.5" font-weight="600" fill="${RED}">${esc(name)}</text>`; labelEnd = va + name.length * 6 + 8; }
       if (!jobs.length) hits.unshift({ key: `${v.rule}@${ln.node}:${ln.g[0]}`, x0: va, x1: va + w, y0, y1: y0 + LANE,
-        html: `<b>No job on these GPUs</b><br>${where}<br><span class="bad">${v.rule} broken for ${dur(Math.min(now, v.b) - v.a)}</span><br><span class="m">${esc(textV(v, now))}</span>` });
+        html: `<b>No job on these GPUs</b><br>${where}<br><span class="bad">${RTITLE[v.rule]} broken for ${dur(Math.min(now, v.b) - v.a)}</span><br><span class="m">${esc(textV(v, now))}</span>` });
       if (v.jobs.length > 1 && activeV(v, now)) (mid[v.rule + v.a] = mid[v.rule + v.a] || []).push(y0 + LANE / 2);
     }
     s += lines;
     y += LANE + GAP;
   }
-  // right gutter: one line per broken boundary_traffic pair, a dot on each job it joins
+  // right gutter: one line per broken cross-partition pair (boundary_traffic), a dot on each job it joins
   Object.values(mid).filter(ys => ys.length > 1).forEach((ys, i) => { const gx = R + 16 + i * 14;
     top += `<line x1="${gx}" y1="${Math.min(...ys)}" x2="${gx}" y2="${Math.max(...ys)}" stroke="${RED}" stroke-width="2"/>` + ys.map(yy => `<circle cx="${gx}" cy="${yy}" r="4.5" fill="${RED}"/>`).join(""); });
   const PB = y - GAP, H = PB + 30;
@@ -757,9 +791,7 @@ function ruleDetail(W, now, k, act) {
   const nodes = W.nodes.map((n, ni) => { const on = I.judged(W, ni, now), v = mean60(W, ni, now, I), over = badNodes.has(ni);
     return `<span class="${on ? "" : "off"}"><span class="nd" style="background:${BOXC[ni % BOXC.length]}"></span>${esc(n.name.split(" ")[0])} <span class="v${over ? " over" : ""}">${I.fmt(v)}</span>${over ? ` <span class="over">· over</span>` : on ? "" : ` · ${I.offText}`}</span>`; }).join("");
   const anyJudged = W.nodes.some((_, ni) => I.judged(W, ni, now));
-  return `<div class="rdet"><div class="rspec"><span class="rl">Rule</span><span><span class="rq">${esc(I.q(W))}</span> <span class="rm">${I.on}</span></span>
-    <span class="rl">Why</span><span class="rw">${I.why}</span>
-    <span class="rl">Right now</span><span class="rnow">${nodes}${anyJudged ? "" : `<span class="off">${I.none}</span>`}</span></div>${ruleGraph(W, now, I)}</div>`;
+  return { q: `<span class="rq">${esc(I.q(W))}</span> <span class="rm">${I.on}</span>`, now: nodes + (anyJudged ? "" : `<span class="off">${I.none}</span>`), graph: ruleGraph(W, now, I) };
 }
 // The rule engine names jobs ("Job 4202: …"); the Rules pane names the node instead (his ask, 2026-11-12).
 const nodesOfV = (W, v) => [...new Set(v.gpus.map(g => +String(g).split(":")[0]))].map(i => W.nodes[i] && W.nodes[i].name.split(" ")[0]).filter(Boolean).join(" + ");
@@ -770,17 +802,50 @@ function ruleText(W, v, now) {
   if ((m = t.match(/^Job \d+ sits on one node and sends ([\d.]+) GB\/s to other nodes/))) return `${n}: sends ${Math.round(+m[1] * 1000)} MB/s to other nodes`;
   return `${n}: ${t}`;
 }
+// The rows are built once and then only their text is updated, 5× a second. (Rebuilding the whole pane every paint
+// dropped clicks whose press and release fell either side of a rebuild: TODO "clicking a rule is unreliable".)
+const setT = (e, v) => { if (e && e.textContent !== v) e.textContent = v; };
+const setH = (e, v) => { if (e && e._h !== v) { e.innerHTML = v; e._h = v; } };
 function paintRules(el, W, now) {
   if (!el) return;
-  el.innerHTML = RULES.map(([k, t]) => {
+  const skey = (W.raw ? "raw|" : "check|") + [...st.ruleOpen].sort().join();
+  if (el._skey !== skey) { el._skey = skey;
+    el.innerHTML = RULES.map(([k, title, , , anchor]) => { const open = st.ruleOpen.has(k) && !W.raw;
+      return `<div class="ritem${open ? " open" : ""}" data-ritem="${k}"><div class="rule" data-rule="${k}"><span class="dot"></span><span class="rname">${esc(title)}</span>
+            <span class="rtext"></span><span class="pill"></span><span class="rcar">▶</span></div>${open ? `<div class="rdet"><div class="rspec">
+            <span class="rl">Rule</span><span class="r-q"></span><span class="rl">Why</span><span class="rw">${RULE_INFO[k].why}</span>
+            <span class="rl">Right now</span><span class="rnow"></span>
+            <span class="rl">Code</span><span class="rcode">${ghA(`node/rules/${k}.py`)} · ${ghA(`node/rules/rules.md#${anchor}`, "the exact definition, in words (rules.md)")}</span></div><div class="r-graph"></div></div>` : ""}</div>`; }).join("");
+  }
+  for (const [k, , , t] of RULES) {
+    const item = el.querySelector(`[data-ritem="${k}"]`); if (!item) continue;
     const act = W.viol.filter(q => q.rule === k && activeV(q, now)), v = act[0], past = W.viol.filter(q => q.rule === k && q.b <= now).length;
     const r = W.raw ? { st: "wait", pill: "not checked", text: t } : now < 30 ? { st: "wait", pill: "warming up", text: "Needs 30 s of data first" }
             : v ? { st: "bad", pill: `broken ${dur(now - v.a)}`, text: act.map(q => ruleText(W, q, now)).join(" · ") }
             : { st: "ok", pill: "holding", text: t + (past ? ` (broke ${past} time${past > 1 ? "s" : ""} earlier in this clip)` : "") };
-    const open = st.ruleOpen.has(k) && !W.raw;
-    return `<div class="ritem${open ? " open" : ""}"><div class="rule" data-rule="${k}"><span class="dot" style="background:${css({ ok: "--good", bad: "--crit", wait: "--axis" }[r.st])}"></span><span class="rname">${k}</span>
-            <span class="rtext">${esc(r.text)}</span><span class="pill ${r.st}">${esc(r.pill)}</span><span class="rcar">▶</span></div>${open ? ruleDetail(W, now, k, act) : ""}</div>`;
-  }).join("");
+    item.querySelector(".dot").style.background = css({ ok: "--good", bad: "--crit", wait: "--axis" }[r.st]);
+    setT(item.querySelector(".rtext"), r.text);
+    const pill = item.querySelector(".pill"); setT(pill, r.pill); pill.className = `pill ${r.st}`;
+    if (item.classList.contains("open")) { const d = ruleDetail(W, now, k, act);
+      setH(item.querySelector(".r-q"), d.q); setH(item.querySelector(".rnow"), d.now); setH(item.querySelector(".r-graph"), d.graph); }
+  }
+}
+// "Slurm table as reported" (his ask, 2026-11-11), as a mock-up for the recordings: no scheduler ran while they were
+// made, so this is the table the declarations above would come from, in squeue's layout. The reporter sends it every
+// 5 s, so it changes on that beat; a job's real activity (its `truth`) is never shown.
+function slurmTable(W, t) {
+  const gpu = gpuName(W).toLowerCase(), head = ["JOBID", "NAME", "STATE", "TIME", "TIME_LIMIT", "NODELIST", "GRES", "COMMENT"];
+  const rows = W.jobs.filter(j => j.start <= t).map(j => [String(j.id), j.name, t < j.limit ? "RUNNING" : "COMPLETED", mmss(Math.min(t, j.limit) - j.start).replace(/^0/, ""),
+    mmss(j.limit - j.start).replace(/^0/, ""), W.nodes[j.node].name.split(" ")[0], `gpu:${gpu}:${j.g[1] - j.g[0] + 1}(IDX:${j.g[0]}-${j.g[1]})`, `declared:${j.type}`]);
+  if (!rows.length) return "(no jobs)";
+  const w = head.map((h, i) => Math.max(h.length, ...rows.map(r => r[i].length)));
+  return [head, ...rows].map(r => r.map((c, i) => i === r.length - 1 ? c : c.padEnd(w[i] + 2)).join("")).join("\n");
+}
+function paintSacct(W, t) {
+  if (!$("#sacct")) return;
+  const got = Math.floor(t / 5) * 5;
+  setT($("#sacctsub"), `· mock-up: no scheduler ran while these were recorded · received at ${mmss(got)}, ${Math.round(t - got)} s ago`);
+  setT($("#sacctpre"), slurmTable(W, got));
 }
 function paint() {
   if (!IDX) return;
@@ -792,7 +857,7 @@ function paint() {
   if (scrub) scrub.style.setProperty("--p", (100 * st.now / (+scrub.max || 1)).toFixed(2) + "%");
   if (tt) tt.textContent = `${mmss(st.now)} / ${mmss(world().dur)}`;
   if (clock) clock.textContent = new Date().toTimeString().slice(0, 8);
-  paintTele($("#tele"), [{ W, t, live }]); paintTL($("#tl"), W, t); paintRules($("#rules"), W, t); paintArch(W, t);
+  paintTele($("#tele"), [{ W, t, live }]); paintTL($("#tl"), W, t); paintRules($("#rules"), W, t); paintArch(W, t); paintSacct(W, t);
 }
 let last = performance.now();
 setInterval(() => {

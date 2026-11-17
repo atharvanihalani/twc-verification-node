@@ -33,6 +33,7 @@ the two-node split above only 0.24; honest training 1.1 to 1.5 on H200 and 0.00 
 import numpy as np
 
 NAME = "boundary_traffic"
+TITLE = "No cross-partition traffic"   # what the page and the docs call it
 NET_SENT_GB_S = 0.001
 PCIE_TEST_ON = False
 PCIE_SENT_GB_S = 0.35
