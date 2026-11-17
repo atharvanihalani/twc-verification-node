@@ -30,7 +30,7 @@ The full spec is [`node/rules/rules.md`](node/rules/rules.md). It is detailed en
 
 ## What it was tested on
 
-Recordings from two 8×H200 nodes, all from one rental on 2026-11-11:
+Recordings from 8×H200 nodes on two rentals: two nodes on 2026-11-11 and one node on 2026-11-16.
 
 - **Inference:** vLLM serving DeepSeek V4.1 Flash, driven by AgentX agentic traces. It covers tensor-parallel, expert-parallel and a prefill/decode split across the two nodes.
 - **Pretraining:** TorchTitan on Llama 3 8B, with different batch sizes and activation-checkpointing settings.
@@ -68,4 +68,4 @@ SITE_PASSWORD=pick-one .venv/bin/uvicorn node.app:app --port 8000
 
 To stream from a real GPU box, open **Debug → Connect a box** on a running node. It shows a one-line install command with the node's URL filled in.
 
-Development history and more detailed notes are in [NOTES.md](NOTES.md). Open work is in [TODOS.md](TODOS.md).
+Open work is in [TODOS.md](TODOS.md).
