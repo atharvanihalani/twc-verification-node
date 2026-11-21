@@ -550,12 +550,165 @@ async def api_collect(request: Request):
     # ingest bookkeeping for the debug page: arrival time, size, how far behind the box's clock we are
     h["recv"].append((now, len(raw), len(samples), now - newest))
     h["last_batch"] = {**d, "samples": samples[:12], "n_samples": len(samples), "bytes": len(raw)}
+    rec = RECORDING.get(str(d.get("host", "?")))
+    if rec and len(rec["rows"]) < REC_MAX_ROWS:
+        rec["rows"].extend(samples)
     for r in samples:
         q = h["rows"].setdefault(int(r["gpu"]), deque())
         q.append(r)
         while q and q[0]["t"] < r["t"] - LIVE_KEEP_S:
             q.popleft()
     return {"ok": True, "need_hello": h["hello"] is None}   # e.g. the node restarted: please introduce yourself again
+
+
+# ---------------------------------------------------------------- recordings of connected boxes
+# The Replay page's "External box" rows (his design, 2026-11-21): a connected box can be watched live, or a stretch of
+# it recorded and replayed beside the built-in recordings. A recording is every row the box sent while it was on,
+# turned on Stop into the format the page already plays (make_replay_data.py's <id>.json and <id>.hz10.json).
+# Kept on disk in TWC_DATA_DIR (a Fly volume, if one is mounted; otherwise lost when the machine restarts).
+DATA_DIR = Path(os.environ.get("TWC_DATA_DIR", HERE.parent / ".data"))
+REC_DIR = DATA_DIR / "recordings"
+REC_MAX_ROWS = 8 * 10 * 3600   # one 8-GPU box for an hour at 10 Hz; recording stops growing after that
+RECORDING = {}                 # host -> {"id", "name", "started", "rows": [collector rows]}
+REC_SCALE = {"power": 1, "tensor": 10, "hbm_bw": 10, "nvlink": 1000, "pcie_tx": 1000, "net_tx": 1000}   # as make_replay_data.py
+
+
+def rec_meta_all():
+    out = []
+    for f in sorted(REC_DIR.glob("*.meta.json")) if REC_DIR.exists() else []:
+        try:
+            out.append(json.loads(f.read_text()))
+        except (OSError, ValueError):
+            pass
+    return sorted(out, key=lambda m: -m["started"])
+
+
+def rec_convert(rows):
+    """Collector rows -> (1 Hz body, 10 Hz body, n seconds, GPU count). Same integer scaling as make_replay_data.py."""
+    rows = [r for r in rows if isinstance(r.get("t"), (int, float))]
+    if not rows:
+        return None
+    t0 = min(r["t"] for r in rows)
+    n = int(max(r["t"] for r in rows) - t0) + 1
+    G = max(int(r["gpu"]) for r in rows) + 1
+    field = {"tensor": "tensor_util_pct", "hbm_bw": "dram_bw_util_pct", "pcie_tx": "pcie_tx_gb_s"}
+    sec = {k: [[[] for _ in range(n)] for _ in range(G)] for k in REC_SCALE}
+    fine = [[[] for _ in range(n * 10)] for _ in range(G)]
+    for r in rows:
+        g, i = int(r["gpu"]), int(r["t"] - t0)
+        if r.get("power_w") is not None:
+            sec["power"][g][i].append(r["power_w"]); fine[g][min(n * 10 - 1, int((r["t"] - t0) * 10))].append(r["power_w"])
+        for k, f in field.items():
+            if r.get(f) is not None:
+                sec[k][g][i].append(r[f])
+        if r.get("nvlink_tx_gb_s") is not None:
+            sec["nvlink"][g][i].append((r.get("nvlink_tx_gb_s") or 0) + (r.get("nvlink_rx_gb_s") or 0))
+        if r.get("net_tx_gb_s") is not None:
+            sec["net_tx"][0][i].append(r["net_tx_gb_s"])
+    def fill(cells, scale):   # mean of each slot; an empty slot repeats the last value
+        out, last = [], 0
+        for c in cells:
+            last = round(sum(c) / len(c) * scale) if c else last
+            out.append(last)
+        return out
+    body = {"n": n, "s": {k: [fill(sec[k][g], REC_SCALE[k]) for g in range(G if k != "net_tx" else 1)] for k in REC_SCALE}}
+    fine_body = {"n": n, "hz": 10, "s": {"power": [fill(fine[g], 1) for g in range(G)]}}
+    return body, fine_body, n, G
+
+
+@app.get("/api/boxes")
+def api_boxes():
+    """The connected boxes and every saved recording, for the page's External box rows."""
+    now = time.time()
+    boxes = []
+    for host, h in LIVE.items():
+        if now - h["last_seen"] > EXPIRE_SILENT_S:
+            continue
+        names = [v for _, v in sorted(h["gpus"].items(), key=lambda kv: int(kv[0]))] if isinstance(h.get("gpus"), dict) else []
+        rec = RECORDING.get(host)
+        boxes.append({"host": host, "label": box_label(h), "gpus": len(h["rows"]) or len(names), "gpu": (names[0] if names else "GPU").replace("NVIDIA ", ""),
+                      "age_s": round(now - h["last_seen"], 1),
+                      "recording": {"name": rec["name"], "since_s": round(now - rec["started"])} if rec else None})
+    return {"now": now, "boxes": boxes, "recordings": rec_meta_all()}
+
+
+@app.get("/api/boxes/rows")
+def api_box_rows(host: str, since: float = 0.0):
+    """A connected box's raw rows newer than `since` (the box's own clock), at most the last two minutes."""
+    h = LIVE.get(host)
+    if not h:
+        return JSONResponse({"error": "no such box"}, status_code=404)
+    keep = ("t", "gpu", "power_w", "tensor_util_pct", "dram_bw_util_pct", "nvlink_tx_gb_s", "nvlink_rx_gb_s", "pcie_tx_gb_s", "net_tx_gb_s")
+    rows = [{k: r[k] for k in keep if k in r} for q in h["rows"].values() for r in q if r["t"] > since]
+    return {"now": time.time(), "rows": rows}
+
+
+@app.post("/api/recordings/start")
+async def api_rec_start(request: Request):
+    d = await request.json()
+    host = str(d.get("host", ""))
+    if host not in LIVE:
+        return JSONResponse({"error": "that box isn't connected"}, status_code=404)
+    if host in RECORDING:
+        return {"ok": True, "already": True}
+    RECORDING[host] = {"id": f"{int(time.time())}-{secrets.token_hex(3)}", "name": str(d.get("name") or "").strip()[:80], "started": time.time(), "rows": []}
+    return {"ok": True}
+
+
+@app.post("/api/recordings/stop")
+async def api_rec_stop(request: Request):
+    d = await request.json()
+    host = str(d.get("host", ""))
+    rec = RECORDING.pop(host, None)
+    if not rec:
+        return JSONResponse({"error": "not recording"}, status_code=404)
+    conv = rec_convert(rec["rows"])
+    if not conv:
+        return JSONResponse({"error": "nothing arrived while recording"}, status_code=400)
+    body, fine, n, G = conv
+    h = LIVE.get(host, {})
+    names = [v for _, v in sorted((h.get("gpus") or {}).items(), key=lambda kv: int(kv[0]))]
+    name = str(d.get("name") or rec["name"] or "").strip()[:80] or f"{host}, {time.strftime('%H:%M', time.gmtime(rec['started']))} UTC"
+    meta = {"id": rec["id"], "host": host, "name": name, "gpus": G, "gpu": (names[0] if names else "GPU").replace("NVIDIA ", ""),
+            "n": n, "started": rec["started"], "label": box_label(h) if h else host}
+    REC_DIR.mkdir(parents=True, exist_ok=True)
+    (REC_DIR / f"{rec['id']}.json").write_text(json.dumps({"id": rec["id"], **body}, separators=(",", ":")))
+    (REC_DIR / f"{rec['id']}.hz10.json").write_text(json.dumps({"id": rec["id"], **fine}, separators=(",", ":")))
+    (REC_DIR / f"{rec['id']}.meta.json").write_text(json.dumps(meta))
+    return {"ok": True, "recording": meta}
+
+
+def rec_path(rid, sfx):
+    if not re.fullmatch(r"[0-9a-f-]{6,40}", rid):
+        return None
+    f = REC_DIR / f"{rid}{sfx}"
+    return f if f.exists() else None
+
+
+@app.get("/api/recordings/{rid}")
+def api_rec_get(rid: str, hz: int = 1):
+    f = rec_path(rid, ".hz10.json" if hz == 10 else ".json")
+    return FileResponse(f, media_type="application/json") if f else JSONResponse({"error": "no such recording"}, status_code=404)
+
+
+@app.post("/api/recordings/{rid}/rename")
+async def api_rec_rename(rid: str, request: Request):
+    f = rec_path(rid, ".meta.json")
+    if not f:
+        return JSONResponse({"error": "no such recording"}, status_code=404)
+    meta = json.loads(f.read_text()); meta["name"] = str((await request.json()).get("name") or "").strip()[:80] or meta["name"]
+    f.write_text(json.dumps(meta))
+    return {"ok": True, "recording": meta}
+
+
+@app.post("/api/recordings/{rid}/delete")
+def api_rec_delete(rid: str):
+    if not rec_path(rid, ".meta.json"):
+        return JSONResponse({"error": "no such recording"}, status_code=404)
+    for sfx in (".json", ".hz10.json", ".meta.json"):
+        if (f := rec_path(rid, sfx)):
+            f.unlink()
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- declarations (Slurm)
@@ -667,8 +820,15 @@ def evaluate_live():
                 for name, field in (("pcie_sent", "pcie_tx_gb_s"), ("tensor_util", "tensor_util_pct")):
                     readings[name][f"{host}:{g}"] = [(r["t"], r[field]) for r in q if r.get(field) is not None]
                 newest.append(pts[-1][0])
+                net = [(r["t"], r["net_tx_gb_s"]) for r in q if r.get("net_tx_gb_s") is not None]
+                if net:   # collector v0.5+: what the box sends over its RDMA ports, one value for the box
+                    readings.setdefault("net_sent", {})[host] = net
     if not buffers:
         return None
+    # Rule 3's network test only means something with more than one box: on one box, traffic on those ports is
+    # storage or downloads, not one job talking to another (his call, 2026-11-21).
+    if len({k.rsplit(":", 1)[0] for k in buffers}) < 2:
+        readings.pop("net_sent", None)
     t_end = min(newest)                                    # every GPU has data up to here
     decls, undeclared_jobs = [], {}
     for c in SLURM.values():

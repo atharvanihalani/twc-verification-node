@@ -24,6 +24,9 @@ Tidied 2026-11-16: open items are on top, each cut to what is still open. Finish
 - [ ] **Still missing from his knob list:** other GPU types (H100, B200, B300, shown as labels).
 
 ## Walkthrough and `setup.py`
+- [ ] **Walkthrough changes of 2026-11-21, not run on a box yet:** AgentX (`agentx-harness==1.0.12`, installed on first use into `~/.twc-setup/agentx-venv`) is the default inference load, BurstGPT the alternative; section 3 has no 4+4 split (every scenario uses whole 8-GPU nodes; `twc-split` is no longer used); "Running as declared" is one TP8 inference job; Evading C is the prefill/decode split across two boxes (needs a two-node rental and collector v0.5 on both).
+- [ ] **Step 2 picker (design B, approved 2026-11-21):** truth vs declaration table, scenarios as presets, Should/Did, grid link. Verdicts for all 225 combinations are in `node/static/replay-data/pairs.json` (`make_replay_data.py --pairs`; all as expected). Page not built yet.
+- [ ] **External box in Side by side: BUILT locally 2026-11-21, not deployed.** "＋ Add a node" → Pretraining / Inference / External box; a box row is Live or one of its recordings, ends in a free-text name; Record / Stop saves a stretch on the node (`/api/recordings/*`, files in `TWC_DATA_DIR`, default `demo-classifier/.data/`). Defaults chosen: while any row is live the bar shows LIVE (no pause, scrub or speed), recorded rows loop beside it, "↺ Restart recordings" restarts them; every non-live row has an offset (‹ › 10 s, Shift 1 min, click to reset) that slides its clip within its recording; with a page recording shown, the longest row sets the length and shorter ones loop. Tested end to end against a fake box (replay_feed.py). Open: a Fly volume (`fly volumes create` + `[mounts]` in fly.toml, `TWC_DATA_DIR=/data`), or recordings vanish on every restart; step 2 doesn't use external boxes yet; the old made-up "your-box" mock path is now unreachable and can be deleted.
 - [ ] **Run every Walkthrough command on a real 8× H200 box, `setup.py` end to end.**
   - Layouts run on vLLM 0.33.0 so far: tensor-parallel and expert-parallel on H200, tensor-parallel on B200, prefill/decode across two H200 nodes. Never run: Two pods (TP4 × 2), anything on H100, anything on B300.
   - Update the page's tags: one "not rerun on 0.33.0" (H200) and four "not run on Blackwell".
@@ -50,8 +53,7 @@ Tidied 2026-11-16: open items are on top, each cut to what is still open. Finish
 
 ## Rules
 Direction (his, 2026-11-10): skip finicky statistical measures; prefer clean decision boundaries.
-- [ ] **Rule 3 can't break on a connected box.** Its PCIe test is off (his call 2026-11-11, "for now"; `PCIE_TEST_ON` in `node/rules/boundary_traffic.py`) and `collector.py` sends no network readings. Open:
-  - Add `/sys/class/infiniband/*/ports/1/counters` to the collector and test on a box. A one-box split still has no network to meter.
+- [ ] **Rule 3 on connected boxes: test it on two real boxes.** Collector v0.5 (2026-11-21) sends what a box sends over its RDMA ports (`net_tx_gb_s`, port 1 of each device under `/sys/class/infiniband`, as the recordings did; plain TCP Ethernet is not counted), and the node passes it to rule 3 only while two or more boxes stream. Tested with fake counters, not on a box. Still open:
   - A job spread over several nodes isn't judged by the network test.
   - The 0.001 GB/s limit comes from one split at 16 sessions and four honest runs; storage traffic over the same ports would trip it.
   - Receivers aren't named; only the sending job is flagged.

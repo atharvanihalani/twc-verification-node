@@ -46,6 +46,7 @@ declarations. This is the plain "telemetry pipe" with nothing else on top.
 """
 import argparse
 import base64
+import glob
 import json
 import math
 import os
@@ -66,7 +67,8 @@ try:
 except ImportError:     # `install` can fix this; `run` will say so
     N = None
 
-VERSION = "v0.4"     # v0.2: says hello (box info) before its first batch; v0.3: --split; v0.4: minor number in hello
+VERSION = "v0.5"     # v0.2: says hello (box info) before its first batch; v0.3: --split; v0.4: minor number in hello;
+                     # v0.5: what the box sends over its RDMA network ports (net_tx_gb_s)
 STARTED_AT = time.time()
 FAST_HZ = 10        # power readings per second, per GPU
 SLOW_EVERY = 10     # read the slow fields every 10th fast tick (= 1 Hz)
@@ -154,6 +156,35 @@ class Gpm:
         return out
 
 
+class NetTx:
+    """GB/s this box sends to other boxes over its high-speed network ports, all ports added up, once a second.
+
+    Reads the RDMA port counters (InfiniBand, and RoCE Ethernet NICs, which show up in the same place): the same
+    counter the recordings used, port 1 of each device, cumulative, in units of 4 bytes. Plain TCP Ethernet is not
+    counted: it also carries downloads and this collector's own traffic. A box with no RDMA ports sends nothing.
+    """
+    ROOT = os.environ.get("TWC_RDMA_ROOT", "/sys/class/infiniband")
+
+    def __init__(self):
+        self.paths = sorted(glob.glob(os.path.join(self.ROOT, "*", "ports", "1", "counters", "port_xmit_data")))
+        self.last = None
+
+    def read(self):
+        if not self.paths:
+            return None
+        total = 0
+        for p in self.paths:
+            try:
+                total += int(open(p).read())
+            except (OSError, ValueError):
+                return None   # a port vanished mid-read: skip this second rather than report a jump
+        now, out = time.monotonic(), None
+        if self.last and now > self.last[0] and total >= self.last[1]:
+            out = round((total - self.last[1]) * 4 / (now - self.last[0]) / 1e9, 4)
+        self.last = (now, total)
+        return out
+
+
 def read_slow(i, h, gpm):
     throttle = getattr(N, "nvmlDeviceGetCurrentClocksEventReasons", None) or N.nvmlDeviceGetCurrentClocksThrottleReasons
     row = {
@@ -211,6 +242,7 @@ def box_info(handles, gpm):
         "driver": _try(N.nvmlSystemGetDriverVersion), "cuda": f"{cuda // 1000}.{cuda % 1000 // 10}" if cuda else None,
         "nvml": _try(N.nvmlSystemGetNVMLVersion), "gpm": gpm.ok,
         "rates_hz": {"power": FAST_HZ, "slow": FAST_HZ / SLOW_EVERY}, "gpus": gpus,
+        "rdma_ports": len(NetTx().paths),
     }
 
 
@@ -284,7 +316,7 @@ def open_gpus():
 
 
 def sample_forever(handles, gpm, batches, lock):
-    tick, period = 0, 1 / FAST_HZ
+    tick, period, net = 0, 1 / FAST_HZ, NetTx()
     cap = int(MAX_BUFFER_S * FAST_HZ * max(1, len(handles)))
     next_t = time.monotonic()
     while True:
@@ -294,6 +326,8 @@ def sample_forever(handles, gpm, batches, lock):
             row = {"t": round(t, 3), "gpu": i, "power_w": round(read_power_w(h), 1)}
             if tick % SLOW_EVERY == 0:
                 row.update(read_slow(i, h, gpm))
+                if i == 0 and (v := net.read()) is not None:
+                    row["net_tx_gb_s"] = v   # one value for the whole box, carried on GPU 0's row
             rows.append(row)
         with lock:
             for batch, local in batches:     # one buffer per (node URL, part); local = {physical idx: idx in part}

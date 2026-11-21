@@ -1,6 +1,14 @@
-# Verification node (demo). One always-on machine; state is in memory.
+# Verification node (demo). One always-on machine; state is in memory, except recordings made on the Replay page,
+# which go to the volume at /data (created 2026-11-21: fly volumes create twc_data --region sjc --size 1).
 app = "twc-verification-node"
 primary_region = "sjc"
+
+[env]
+  TWC_DATA_DIR = "/data"
+
+[mounts]
+  source = "twc_data"
+  destination = "/data"
 
 [http_service]
   internal_port = 8080

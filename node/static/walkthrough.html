@@ -83,6 +83,7 @@
     <p>Choose a default inference or training workload. You can optionally customize it as well.</p>
     <div class="pills big" id="kind"></div>
     <div class="pills" id="workload"></div>
+    <div class="pills" id="load"></div>
     <p id="wl-what"></p>
     <div class="cmd card"><pre class="mono" id="wl-cmd"></pre><button data-copy="wl-cmd">Copy</button></div>
     <dl class="kv">
@@ -102,7 +103,7 @@
     <p>Jobs declare what they are, and the checker compares that with what the GPUs do. Run this once to connect Slurm.</p>
     <div class="cmd card"><pre class="mono" id="sched"></pre><button data-copy="sched">Copy</button></div>
     <div class="label" style="margin-top:8px">Then pick a scenario</div>
-    <p class="sub2">Each one starts by setting how the box reports: as two 4-GPU nodes or as one. Stop the previous scenario first, with the stop commands in section 2.</p>
+    <p class="sub2">Stop the previous scenario first, with the stop commands in section 2.</p>
     <div class="pills" id="scenario"></div>
     <p id="sc-what"></p>
     <div class="cmd card"><pre class="mono" id="sc-cmd"></pre><button data-copy="sc-cmd">Copy</button></div>
@@ -216,6 +217,22 @@ done; echo "the server on port ${port} is ready"`;
   --ignore-eos \\
   --num-prompts 20000`;
   const LOAD_TRY = ["--request-rate: requests per second", "--burstiness: below 1 is burstier, above 1 is steadier"];
+  // AgentX (agentx-harness 1.0.12) replays recorded Claude Code sessions: the load in the demo's recordings (his ask,
+  // 2026-11-21). It insists on 900 s of measured load, after its own start-up (about 4 min) and a cache warm-up (2 to 7).
+  const AXINSTALL = `# First time only: install AgentX in its own environment (about a minute)
+UV=$(command -v uv || echo ~/.twc-setup/bin/uv)
+[ -x ~/.twc-setup/agentx-venv/bin/agentx ] || { $UV venv -q ~/.twc-setup/agentx-venv && $UV pip install -q -p ~/.twc-setup/agentx-venv agentx-harness==1.0.12; }`;
+  const agentx = (port, conc, seed = 42, out = "agentx") => `~/.twc-setup/agentx-venv/bin/agentx profile --url http://localhost:${port} \\
+  --endpoint /v1/chat/completions --model ${box().model} \\
+  --tokenizer ${box().model} --tokenizer-trust-remote-code --streaming \\
+  --concurrency ${conc} --public-dataset semianalysis-cc-traces-weka-062126 \\
+  --benchmark-duration 900 --benchmark-grace-period 30 --random-seed ${seed} \\
+  --output-artifact-dir ~/${out} > ~/${out}.log 2>&1`;
+  const AX_TRY = ["--concurrency: sessions at once (the recordings used 4, 16 and 64)",
+                  "Expect about 10 minutes of start-up and cache warm-up before the measured 15 minutes; progress is in ~/agentx.log"];
+  const sendLoad = (port, conc, rate) => state.load === "agentx" ? [AXINSTALL, "# Send it recorded coding-agent sessions\n" + agentx(port, conc)]
+                                                                 : [TRACE, "# Send it bursty load\n" + bench(port, rate)];
+  const loadTry = () => state.load === "agentx" ? AX_TRY : LOAD_TRY;
 
   const TT = "~/.twc-setup/torchtitan";
   // Built per render, because the model and its flags depend on the box picked in section 1.
@@ -223,19 +240,21 @@ done; echo "the server on port ${port} is ready"`;
     const b = box(), first = `# Needs ${b.name} (${b.gb} GB). Setup downloads it in the background; check with:\n#   ~/.twc-setup/bin/twc-progress\n`;
     return [
       { id: "tp8", label: "Tensor-parallel", what: `One copy of ${b.name}. Every layer is split across all 8 GPUs (TP8).`,
-        cmd: [setup(), first + serve("tp8", 8100), "# Wait until it's ready: the download if needed, then loading into the GPUs\n" + ready(8100), TRACE, "# Send it bursty load\n" + bench(8100, 2)],
-        see: ["All 8 GPUs move together", "Power rises and falls with the bursts"],
-        tryit: LOAD_TRY,
+        cmd: [setup(), first + serve("tp8", 8100), "# Wait until it's ready: the download if needed, then loading into the GPUs\n" + ready(8100), ...sendLoad(8100, 16, 2)],
+        see: ["All 8 GPUs move together", "Power rises and falls with the load"],
+        tryit: loadTry(),
         mock: tested("tp8") },
       { id: "ep8", label: "Expert-parallel", what: `One copy of ${b.name}. Attention runs on every GPU; the experts are spread across all 8 (DP8 + EP).`,
-        cmd: [setup(), first + serve("ep8", 8100), "# Wait until it's ready: the download if needed, then loading into the GPUs\n" + ready(8100), TRACE, "# Send it bursty load\n" + bench(8100, 2)],
+        cmd: [setup(), first + serve("ep8", 8100), "# Wait until it's ready: the download if needed, then loading into the GPUs\n" + ready(8100), ...sendLoad(8100, 16, 2)],
         see: ["Lower, flatter power than Tensor-parallel"],
-        tryit: ["Compare power per GPU with Tensor-parallel at the same load", ...LOAD_TRY],
+        tryit: ["Compare power per GPU with Tensor-parallel at the same load", ...loadTry()],
         mock: tested("ep8") },
       { id: "pods", label: "Two pods", what: `Two independent copies of ${b.name}, 4 GPUs each (TP4 × 2).`,
-        cmd: [setup(), first + "# Start one server per half\n" + serve("tp4", 8101, "0,1,2,3"), serve("tp4", 8102, "4,5,6,7"), "# Wait until both are ready: the download if needed, then loading into the GPUs\n" + ready(8101) + "\n" + ready(8102), TRACE, "# Send each one bursty load\n" + bench(8101, 1) + " &", bench(8102, 1) + " &"],
+        cmd: [setup(), first + "# Start one server per half\n" + serve("tp4", 8101, "0,1,2,3"), serve("tp4", 8102, "4,5,6,7"), "# Wait until both are ready: the download if needed, then loading into the GPUs\n" + ready(8101) + "\n" + ready(8102),
+              ...(state.load === "agentx" ? [AXINSTALL, "# Send each one recorded coding-agent sessions, 8 at a time\n" + agentx(8101, 8, 42, "agentx-1") + " &", agentx(8102, 8, 43, "agentx-2") + " &"]
+                                          : [TRACE, "# Send each one bursty load\n" + bench(8101, 1) + " &", bench(8102, 1) + " &"])],
         see: ["Each half moves together", "The two halves don't"],
-        tryit: ["Send one pod far more load", ...LOAD_TRY],
+        tryit: ["Send one pod far more load", ...loadTry()],
         mock: tested("tp4") },
     ];
   };
@@ -262,12 +281,9 @@ TWC_BATCH=${TRAIN[state.gpu].batch} TWC_SEQ_LEN=8192 TWC_REMAT=default TWC_STEPS
               "TWC_REMAT=full: recompute activations. About 60% less memory, 10% slower, and a faint per-step rhythm appears"],
       mock: TRAIN[state.gpu].tag },
   ];
-  const STOP = ['scancel --user=$USER 2>/dev/null', 'pkill -f "[v]llm bench"', 'pkill -f "[v]llm serve"', 'pkill -9 -f "[V]LLM::"', 'pkill -f "[t]wc_workloads"', 'pkill -f "[t]orchtitan.train"'];
+  const STOP = ['scancel --user=$USER 2>/dev/null', 'pkill -f "[a]gentx profile"', 'pkill -f "[p]d_proxy"', 'pkill -f "[v]llm bench"', 'pkill -f "[v]llm serve"', 'pkill -9 -f "[V]LLM::"', 'pkill -f "[t]wc_workloads"', 'pkill -f "[t]orchtitan.train"'];
 
-  // ---- section 3. Each scenario's first line sets how the box reports itself: as two 4-GPU nodes, so the two
-  // halves show as separate boxes on the graphs, or as one 8-GPU node. twc-split does nothing if it's already so.
-  const SPLIT = { two: "# Report this box as two 4-GPU nodes, so the halves show separately\n~/.twc-setup/bin/twc-split 4+4",
-                  one: "# Report this box as one 8-GPU node\n~/.twc-setup/bin/twc-split off" };
+  // ---- section 3. Every scenario uses whole 8-GPU nodes (his call, 2026-11-21: no 4+4 split).
   // A Slurm job. The script goes in on stdin, so the quotes inside it need no escaping.
   const job = (gpus, type, name, body) => `sbatch --gres=gpu:${gpus} --comment=declared:${type} --job-name=${name} <<'EOF'
 #!/bin/bash
@@ -278,59 +294,46 @@ EOF`;
   const trainJob = n => `cd ${TT} && source .venv/bin/activate
 ${trainEnv(n)}
   ./run_train.sh --output-dir ~/tt-run > ~/train.log 2>&1`;
-  const podJob = port => `${setup()}
-[ -f ~/burstgpt.csv ] || curl -sL -o ~/burstgpt.csv https://github.com/HPMLL/BurstGPT/releases/download/v1.1/BurstGPT_without_fails_2.csv
-${serve("tp4", port)}
-until curl -sf localhost:${port}/health > /dev/null; do sleep 15; done
-${bench(port, 1)}`;
-  // Scenario C: one inference service split across the two halves. The prefill server reads each prompt and the
-  // decode server writes the answer; UCX_TLS=^cuda_ipc keeps the hand-off off the direct GPU-to-GPU path, so it
-  // goes through host memory and shows up on PCIe. Ran on H200 (see "[C] pd-over-pcie-trial.md").
-  const pdJob = (port, side) => `${setup()}
-export UCX_TLS=^cuda_ipc VLLM_NIXL_SIDE_CHANNEL_HOST=127.0.0.1 VLLM_NIXL_SIDE_CHANNEL_PORT=${side}
-vllm serve ${box().model} \\
-${[...FLAGS[box().family].tp4.filter(f => !f.startsWith("--max-num-seqs")), "--max-num-seqs 32",
-     `--kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'`, `--port ${port}`].map(f => `  ${f} \\`).join("\n")}
+  // A server in the foreground, for inside a Slurm job (a background one would end with the job script).
+  const serveFg = (layout, port, extra = []) => `vllm serve ${box().model} \\
+${[...FLAGS[box().family][layout], ...extra, `--port ${port}`].map(f => `  ${f} \\`).join("\n")}
   > ~/serve-${port}.log 2>&1`;
-  const pdProxy = `# The proxy that passes each request from the first half to the second
-nohup python ~/.twc-setup/pd_proxy.py --host 127.0.0.1 --port 8192 \\
-  --prefiller-hosts 127.0.0.1 --prefiller-ports 8101 \\
-  --decoder-hosts 127.0.0.1 --decoder-ports 8102 \\
+  const serveJob = port => `${setup()}\n${serveFg("tp8", port)}`;
+  // Scenario C: one inference service split across two whole boxes, as in the demo's recording (recording/server/
+  // pd_prefill.sh, pd_decode.sh): the prefill server reads each prompt and hands its cached work over the network to
+  // the decode server, which writes the answer. PREFILL_IP and DECODE_IP are exported in the shell; sbatch passes them on.
+  const pdJob = (ip, port, side) => `${setup()}
+export UCX_TLS=^cuda_ipc VLLM_NIXL_SIDE_CHANNEL_HOST=${ip} VLLM_NIXL_SIDE_CHANNEL_PORT=${side}
+${serveFg("tp8", port, ["--max-num-seqs 32", `--kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'`, `--host ${ip}`])}`;
+  const pdWait = `# On the first box: wait until both servers answer (about 15 minutes), then start the proxy in front of them
+until curl -sf $PREFILL_IP:8101/health > /dev/null && curl -sf $DECODE_IP:8102/health > /dev/null; do sleep 15; done
+nohup ${PY} ~/.twc-setup/pd_proxy.py --host 127.0.0.1 --port 8192 \\
+  --prefiller-hosts $PREFILL_IP --prefiller-ports 8101 \\
+  --decoder-hosts $DECODE_IP --decoder-ports 8102 \\
   > ~/proxy.log 2>&1 &`;
-  const pdLoad = () => `# Long prompts, so each hand-off is big enough to see
-vllm bench serve \\
-  --model ${box().model} \\
-  --port 8192 \\
-  --random-input-len 20000 \\
-  --random-output-len 32 \\
-  --ignore-eos \\
-  --max-concurrency 4 \\
-  --num-prompts 5000`;
   const scenarios = () => [
-    { id: "ok", label: "Running as declared", what: "Pretraining on four GPUs and inference on the other four, declared truthfully.",
-      cmd: [SPLIT.two, "# Pretraining, declared as pretraining\n" + job(4, "pretraining", "pretrain", trainJob(4)),
-            "# Inference, declared as inference\n" + job(4, "inference", "serve", podJob(8101))],
-      expect: "Every rule holds. The two halves look different.", mock: "not run yet" },
+    { id: "ok", label: "Running as declared", what: "One inference service on all eight GPUs, declared as inference.",
+      cmd: ["# Inference, declared as inference\n" + job(8, "inference", "serve", serveJob(8100)),
+            "# Wait until it's ready\n" + ready(8100), AXINSTALL, "# Send it recorded coding-agent sessions\n" + agentx(8100, 16)],
+      expect: "Every rule holds.", mock: "not run yet" },
     { id: "a", label: "Evading A: off the books", what: "Train on all eight GPUs with no job declared.",
-      cmd: [SPLIT.one, `# Training, started outside Slurm\ncd ${TT} && source .venv/bin/activate\n${trainEnv(8)}\n  nohup ./run_train.sh --output-dir ~/tt-run > ~/train.log 2>&1 &`],
+      cmd: [`# Training, started outside Slurm\ncd ${TT} && source .venv/bin/activate\n${trainEnv(8)}\n  nohup ./run_train.sh --output-dir ~/tt-run > ~/train.log 2>&1 &`],
       expect: "Caught: “No undeclared workloads” breaks on all eight GPUs.", mock: "not run yet" },
     { id: "b", label: "Evading B: mislabelled", what: "Declare one inference job on all eight GPUs, then train on them.",
-      cmd: [SPLIT.one, "# Training, declared as inference\n" + job(8, "inference", "serve", trainJob(8))],
+      cmd: ["# Training, declared as inference\n" + job(8, "inference", "serve", trainJob(8))],
       expect: "Caught: “No hidden training” breaks.", mock: "not run yet" },
-    { id: "c", label: "Evading C: talking across the boundary",
-      what: "On paper, two separate inference jobs, four GPUs each. In reality it is one inference service split across both halves. The first half reads the prompts and hands its work to the second half, which writes the answers.",
-      cmd: [SPLIT.two,
-            "# Declared as its own inference job. Really: the half that reads the prompts\n" + job(4, "inference", "serve-1", pdJob(8101, 5600)),
-            "# Declared as its own inference job. Really: the half that writes the answers\n" + job(4, "inference", "serve-2", pdJob(8102, 5700)),
-            "# Wait until both are ready: about 15 minutes when they load together\n" + setup() + "\n" + ready(8101) + "\n" + ready(8102),
-            pdProxy, pdLoad()],
-      expect: "Not caught on one box, for now. “No cross-partition traffic” reads what a node sends to other nodes over the network, and here both halves sit on the same box, so nothing crosses a network. The earlier stand-in, each GPU's PCIe traffic (about 0.45 GB/s here), is switched off. Across two nodes the same split is caught: see One job split in two on the Replay demo.",
-      mock: box().family === "ds" ? (state.gpu === "H200" ? "servers and proxy ran on H200 outside Slurm; not run as Slurm jobs; load command not run" : "the H200 commands; not run on Blackwell")
-                                  : "our guess: not tested for MiniMax on H100" },
+    { id: "c", label: "Evading C: one service on two boxes",
+      what: "Needs a second box on the same private network (a two-node rental), set up with section 1 and connected to Slurm with the command above. On paper, two separate inference jobs, one per box. In reality one inference service: the first box reads the prompts and hands its work to the second over the network, which writes the answers.",
+      cmd: ["# On both boxes: each box's private address (hostname -I shows it)\nexport PREFILL_IP=10.0.0.1 DECODE_IP=10.0.0.2",
+            "# On the first box. Declared as its own inference job. Really: the half that reads the prompts\n" + job(8, "inference", "serve-1", pdJob("$PREFILL_IP", 8101, 5600)),
+            "# On the second box. Declared as its own inference job. Really: the half that writes the answers\n" + job(8, "inference", "serve-2", pdJob("$DECODE_IP", 8102, 5700)),
+            pdWait, AXINSTALL, "# On the first box: send the service recorded coding-agent sessions, through the proxy\n" + agentx(8192, 16)],
+      expect: "Caught: “No cross-partition traffic” breaks on the first box, which sends its work to the second over the network. Both boxes need collector v0.5 or later; rerun section 1's install if yours is older.",
+      mock: box().family === "ds" && state.gpu === "H200" ? "ran as plain servers on a two-node H200 rental (the demo's recording); not run as Slurm jobs" : "our guess: only run on H200" },
   ];
   const SCENARIO_IDS = ["ok", "a", "b", "c"];
 
-  const state = { gpu: "H200", kind: "inference", workload: { inference: "tp8", pretraining: "torchtitan" }, scenario: "ok",
+  const state = { gpu: "H200", kind: "inference", load: "agentx", workload: { inference: "tp8", pretraining: "torchtitan" }, scenario: "ok",
                   declare: "inference", run: "duty", gpus: "all", steps: "long" };
 
   function pills(id, options, get, set) {
@@ -347,6 +350,8 @@ vllm bench serve \\
     const list = state.kind === "inference" ? inference() : pretraining();
     pills("workload", list, () => state.workload[state.kind], v => state.workload[state.kind] = v);
     $("workload").style.display = list.length > 1 ? "" : "none";
+    pills("load", [{ id: "agentx", label: "Load: AgentX coding-agent sessions" }, { id: "burst", label: "Load: BurstGPT chat bursts" }], () => state.load, v => state.load = v);
+    $("load").style.display = state.kind === "inference" ? "" : "none";
     const w = list.find(x => x.id === state.workload[state.kind]);
     $("wl-what").textContent = w.what; setCmd("wl-cmd", w.cmd.join("\n\n"));
     setList("wl-see", w.see); setList("wl-try", w.tryit); mockTag($("wl-mock"), w.mock);

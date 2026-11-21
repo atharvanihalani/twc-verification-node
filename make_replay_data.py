@@ -164,8 +164,8 @@ def spans(evals, jobs, step=5.0):
     for t, r in evals:
         now = {}
         for h in r["hits"]:
-            if h["rule"] == "undeclared_load":   # one hit per GPU: show them as one
-                q = now.setdefault("undeclared_load", {"rule": h["rule"], "gpus": [], "jobs": [], "w": []})
+            if h["rule"] == "undeclared_load":   # one hit per GPU: show each node's as one
+                q = now.setdefault("undeclared_load|" + h["gpus"][0].split(":")[0], {"rule": h["rule"], "gpus": [], "jobs": [], "w": []})
                 q["gpus"] += h["gpus"]; q["w"].append(float(h["detail"].split(" at ")[1].split(" W")[0]))
             else:
                 ids = [str(x) for x in h["jobs"]]
@@ -293,10 +293,107 @@ def scenarios(L):
     return S
 
 
+# Step 2's picker (his design "B", 2026-11-21): the reader picks what node-a really serves and what node-b really
+# trains, and what Slurm declares on each node (inference / pretraining / nothing). Every combination is judged here
+# by the real rules, so the page only plays results back. The scenarios are presets of this table.
+SERVE = [("i5", 4), ("i1", 16), ("i1", 64), ("i4", 4), ("i2", 16), ("i4", 64)]   # tensor-parallel 4/16/64, expert-parallel 4/16/64
+TRAIN = ["p1b", "p3", "p2", "p4"]                                                   # batch 4, batch 1; then the same with middle checkpointing
+DECL = {"i": "inference", "p": "pretraining", "n": None}
+
+
+def world(L, nodes, truth, decl, dur=600):
+    """One combination. nodes: [(recording id, offset s)], truth: what each node really runs, decl: "i" / "p" / "n" per node.
+    Returns the verdicts as stretches, what should happen (from truth and declarations alone), and what did."""
+    split = truth == ["inference", "inference"]   # only the two-node prefill/decode recording has both nodes serving
+    jobs = []
+    for ni, d in enumerate(decl):
+        if DECL[d]:
+            jobs.append({"id": 5001 + ni, "type": DECL[d], "node": ni, "g": [0, L[nodes[ni][0]]["G"] - 1]})
+    ev = evaluate([(L[r], off) for r, off in nodes], jobs, dur)
+    viol = spans(ev, jobs)
+    node = lambda ni: f"node-{'ab'[ni]}"
+    title = lambda r: f"“{rules.RULE_TITLE[r]}”"
+    expect, should = [], []
+    for ni, d in enumerate(decl):
+        if d == "n":
+            expect.append(("undeclared_load", ni)); should.append(f"{node(ni)} is busy with nothing declared, so {title('undeclared_load')} should break there.")
+        elif d == "i" and truth[ni] == "pretraining":
+            expect.append(("training_shaped", ni)); should.append(f"{node(ni)} trains but is declared inference, so {title('training_shaped')} should break there.")
+        elif d == "i" and split and ni == 0:   # the prefill half sends its work to decode; the rule flags the sender only
+            expect.append(("boundary_traffic", ni))
+            should.append(f"{node(ni)} is declared a job of its own but hands its work to {node(1)} over the network, so {title('boundary_traffic')} should break on {node(ni)} (the rule flags the node that sends).")
+    if not expect:
+        should.append("Every busy node is declared, and nothing trains under an inference declaration, so all three rules should hold.")
+    if any(d == "p" and truth[ni] == "inference" for ni, d in enumerate(decl)):
+        should.append("Serving declared as pretraining is not checked: no rule tests that a pretraining job really trains.")
+    mmss = lambda t: f"{int(t) // 60}:{int(t) % 60:02d}"
+    got = {}   # (rule, node) -> stretches
+    for v in viol:
+        for ni in sorted({int(g.split(":")[0]) for g in v["gpus"]}):
+            got.setdefault((v["rule"], ni), []).append(v)
+    did, miss, false = [], 0, 0
+    for r, ni in expect:
+        vs = got.get((r, ni))
+        if vs:
+            again = len(vs) - 1
+            did.append({"kind": "caught", "text": f"{title(r)} broke on {node(ni)} {mmss(vs[0]['a'])} in" + (f", then let go and broke again {again} time{'s' if again > 1 else ''}" if again else "") + "."})
+        else:
+            miss += 1; did.append({"kind": "missed", "text": f"{title(r)} never broke on {node(ni)}."})
+    for (r, ni), vs in got.items():
+        if (r, ni) not in expect:
+            false += 1; did.append({"kind": "false alarm", "text": f"{title(r)} broke on {node(ni)} {mmss(vs[0]['a'])} in ({vs[0]['d'][-1][1]})."})
+    if not did:
+        did.append({"kind": "holds", "text": "All three rules held from start to end."})
+    elif not miss and not false and len(expect) and not any(q["kind"] != "caught" for q in did):
+        did.append({"kind": "holds", "text": "No other rule broke."})
+    return {"viol": viol, "should": " ".join(should), "did": did, "ok": not miss and not false, "miss": miss, "false": false}
+
+
+def pairs(L):
+    """Every serving run beside every training run, under every pair of declarations; plus the two-node split."""
+    out, t0 = {}, datetime.datetime.now()
+    serve = {f"{r}c{c}": (r, L[r]["mark"][f"load_{c}"]) for r, c in SERVE}
+    train = {r: (r, L[r]["mark"]["train_start"] - 30) for r in TRAIN}
+    for sid, s in serve.items():
+        for tid, t in train.items():
+            for da in DECL:
+                for db in DECL:
+                    out[f"{sid}|{tid}|{da}{db}"] = world(L, [s, t], ["inference", "pretraining"], [da, db])
+    split = [("i3p", L["i3p"]["mark"]["load_16"]), ("i3d", L["i3d"]["mark"]["load_16"])]
+    for da in DECL:
+        for db in DECL:
+            out[f"split|split|{da}{db}"] = world(L, split, ["inference", "inference"], [da, db])
+    for w in out.values():   # the stretches' "d" texts are the long part; round times
+        for v in w["viol"]:
+            v["a"], v["b"] = round(v["a"]), (v["b"] if v["b"] > 1e8 else round(v["b"]))
+    bad = [k for k, w in out.items() if not w["ok"]]
+    print(f"pairs: {len(out)} combinations in {(datetime.datetime.now() - t0).seconds} s; not as expected: {len(bad)}")
+    for k in bad:
+        print("   ", k, "|", " ".join(q["text"] for q in out[k]["did"] if q["kind"] != "caught"))
+    return {"dur": 600, "serve": {k: {"rec": r, "off": round(o)} for k, (r, o) in serve.items()},
+            "train": {k: {"rec": r, "off": round(o)} for k, (r, o) in train.items()},
+            "split": [{"rec": r, "off": round(o)} for r, o in split], "worlds": out}
+
+
 def main():
     L = {rid: load(rid) for rid in RECS}
     if "--table" in sys.argv:
         return table(L)
+    if "--pairs" in sys.argv:   # only rewrite pairs.json
+        (OUT / "pairs.json").write_text(json.dumps(pairs(L), separators=(",", ":")))
+        return print("wrote", OUT / "pairs.json")
+    if "--pairs-split" in sys.argv:   # only redo the two-node split's combinations, keep the rest of pairs.json
+        P = json.load(open(OUT / "pairs.json"))
+        split = [("i3p", L["i3p"]["mark"]["load_16"]), ("i3d", L["i3d"]["mark"]["load_16"])]
+        for da in DECL:
+            for db in DECL:
+                w = world(L, split, ["inference", "inference"], [da, db])
+                for v in w["viol"]:
+                    v["a"], v["b"] = round(v["a"]), (v["b"] if v["b"] > 1e8 else round(v["b"]))
+                P["worlds"][f"split|split|{da}{db}"] = w
+                print(da + db, "ok" if w["ok"] else "NOT as expected", "|", w["should"], "|", " ".join(q["text"] for q in w["did"]))
+        (OUT / "pairs.json").write_text(json.dumps(P, separators=(",", ":")))
+        return print("wrote", OUT / "pairs.json")
     OUT.mkdir(parents=True, exist_ok=True)
     index = {"made_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M"), "scale": SCALE, "recs": {}}
     for rid, rec in L.items():
@@ -311,6 +408,7 @@ def main():
         print(f"{rid}: {rec['n']} s, {len(text) // 1024} KB at 1 Hz, {len(fine) // 1024} KB at {FINE_HZ} Hz")
     index["scenarios"] = scenarios(L)
     (OUT / "index.json").write_text(json.dumps(index, separators=(",", ":")))
+    (OUT / "pairs.json").write_text(json.dumps(pairs(L), separators=(",", ":")))
     print("wrote", OUT)
 
 

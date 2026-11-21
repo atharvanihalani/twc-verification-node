@@ -90,6 +90,30 @@
   .srm:hover { color: var(--ink); }
   .sadd { font: inherit; font-size: 13px; border: 0; background: none; color: var(--ink2); cursor: pointer; padding: 2px 0 0 11px; justify-self: start; }
   .sadd:hover { color: var(--ink); }
+  /* External box rows, offsets and the live bar (2026-11-21) */
+  .shift { display: inline-flex; align-items: center; margin-left: 10px; border: 1px solid var(--grid); border-radius: 6px; }
+  .shift button { font: 12px ui-monospace, Menlo, monospace; border: 0; background: none; color: var(--muted); padding: 1px 6px; cursor: pointer; }
+  .shift button:hover { color: var(--ink); background: var(--grid); }
+  .shift .sv { color: var(--muted); min-width: 52px; } .shift .sv.moved { color: var(--ink); font-weight: 600; }
+  .xdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 5px; vertical-align: 1px; }
+  .xname { font: inherit; font-size: 13.5px; border: 0; border-bottom: 1px dashed var(--axis); background: transparent; padding: 2px 4px; width: 160px; color: var(--ink); outline: none; font-style: italic; }
+  .xname::placeholder { color: var(--muted); }
+  .xname:focus { border-bottom-color: var(--ink); }
+  .xlive { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--good); margin-left: 8px; white-space: nowrap; }
+  .xlive i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); display: inline-block; }
+  .recbtn { font: inherit; font-size: 12px; border: 1px solid var(--axis); background: transparent; color: var(--ink); padding: 1px 9px; margin-left: 8px; cursor: pointer; white-space: nowrap; }
+  .recbtn .d { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--crit); margin-right: 5px; }
+  .recbtn.on { border-color: var(--crit); color: var(--crit); } .recbtn.on .d { animation: pulse 1.2s ease-in-out infinite; }
+  .sseg .pop .none { padding: 4px 14px 6px 24px; font-size: 12.5px; color: var(--muted); }
+  .sseg .pop .divl { border-top: 1px solid var(--grid); margin: 5px 0; }
+  .sseg .pop button.danger { color: var(--crit); }
+  .addwrap { justify-self: start; } .addwrap .pop { min-width: 320px; }
+  .addwrap .pop button > span { display: grid; } .addwrap .pop small.sub { margin: 0; padding: 0; font-size: 12px; color: var(--muted); }
+  .addwrap .pop button:disabled small.sub { color: var(--axis); }
+  .xtoast { margin: 4px 0 0 11px; font-size: 12.5px; color: var(--ink2); }
+  .transport.livebar { padding: 6px 12px; min-height: 32px; }
+  .livebar .lv { font-size: 12px; letter-spacing: .08em; color: var(--good); }
+  .livebar .lnote { font-size: 12.5px; color: var(--ink2); }
   .how { min-width: 320px; max-width: 460px; white-space: normal; line-height: 1.45; } .how b { font-weight: 600; } .how code { font: 11.5px ui-monospace, Menlo, monospace; }
   .how a { color: var(--s1); }
   .scnote { margin: 0 0 0 12px; font-size: 13px; color: var(--ink2); max-width: 700px; } .scnote b { font-weight: 600; color: var(--ink); }
@@ -252,7 +276,9 @@ const dur = s => { s = Math.max(0, Math.round(s)); return s >= 60 ? `${Math.floo
 const DATA = "/static/replay-data/", REC = {}, REC10 = {}, asked = {};
 let IDX = null;
 function need(W) { for (const n of W.nodes) if (n.rec) for (const [sfx, store] of [["", REC], [".hz10", REC10]])
-  if (!asked[n.rec + sfx]) { asked[n.rec + sfx] = 1; fetch(DATA + n.rec + sfx + ".json").then(r => r.json()).then(d => { store[n.rec] = d; paint(); }); } }
+  if (!asked[n.rec + sfx]) { asked[n.rec + sfx] = 1;
+    const url = n.rec.startsWith("x:") ? `/api/recordings/${n.rec.slice(2)}${sfx ? "?hz=10" : ""}` : DATA + n.rec + sfx + ".json";   // x: = made on this page
+    fetch(url).then(r => r.json()).then(d => { store[n.rec] = d; paint(); }); } }
 // The rules: code name (what the rule engine and the data call it), readable title (TITLE in node/rules/*.py),
 // a short form for tight spots (the diagram's report, labels over the timeline), one line, and its heading in rules.md.
 const RULES = [["undeclared_load", "No undeclared workloads", "undeclared workload", "No busy GPU outside a declared job", "rule-1-no-undeclared-workloads"],
@@ -312,11 +338,12 @@ const ONE_NODE_RENTALS = new Set(["f7c934d6798b"]);
 const RAW_NAMES = ["Pretraining", "Inference", "Side by side"], KIND = ["pre", "inf"];
 // Side by side: any recordings, one row each (st.side), up to SIDE_MAX nodes in all (the split takes two). Clips are
 // lined up to start together and the shortest sets the length. A pretraining clip starts 30 s before training does.
-const SIDE_MAX = 4, LETTERS = "abcdefgh", KTITLE = { pre: "Pretraining", inf: "Inference" };
+const SIDE_MAX = 4, LETTERS = "abcdefgh", KTITLE = { pre: "Pretraining", inf: "Inference", ext: "External box" };
 const SHOW = { pre: [v => `batch ${v}`, v => `${v} checkpointing`], inf: [v => v, v => v.replace("prefill and decode split, two nodes", "prefill/decode split"), v => `${v} sessions`] };   // how a choice reads in the row
 const sideCell = s => KINDS[s.k].cells.find(c => c.pick.every((v, i) => v === s.pick[i]));
 const clipOf = c => c.to ? c : { ...c, at: "train_start", before: 30, to: "train_stop", after: 0 };
-const sideNodes = side => side.reduce((n, s) => n + sideCell(s).nodes.length, 0);
+const sideW = s => s.k === "ext" ? 1 : sideCell(s).nodes.length;   // how many nodes a Side by side row takes
+const sideNodes = side => side.reduce((n, s) => n + sideW(s), 0);
 function nearest(k, pick, L, i) {   // the recorded combination with lever L = i that keeps most of the other choices
   const score = q => q.pick.filter((v, j) => v === pick[j]).length;
   return KINDS[k].cells.filter(q => q.pick[L] === i).sort((a, b) => score(b) - score(a))[0];
@@ -325,14 +352,32 @@ const nodeOf = ([name, rec], at, before) => ({ name, rec, gpus: IDX.recs[rec].gp
 const cellOf = kind => KINDS[kind].cells.find(c => c.pick.every((v, i) => v === st.pick[kind][i]));
 let _rw = { key: "" };
 function rawWorld() {
-  const key = st.raw + "|" + JSON.stringify(st.pick) + (st.raw === 2 ? JSON.stringify(st.side) : "");
+  const key = st.raw + "|" + JSON.stringify(st.pick) + (st.raw === 2 ? JSON.stringify(st.side) + BOXES.ver : "");
   if (_rw.key === key) return _rw.W;
   const W = { raw: true, name: RAW_NAMES[st.raw], jobs: [], viol: [], extra: [] };
   if (st.raw === 2) { let li = 0; const durs = []; W.nodes = [];
-    for (const s of st.side) { const c = clipOf(sideCell(s));
+    for (const s of st.side) {
+      if (s.k === "ext") {   // a connected box: live, or a recording of it made on this page
+        if (s.mode === "live") { const b = BOXES.boxes.find(x => x.host === s.host) || { gpus: 8, gpu: "GPU" };
+          W.nodes.push({ name: `node-${LETTERS[li++]}`, live: s.host, gpus: b.gpus, gpu: b.gpu, off: 0, label: s.name || "" }); W.live = true; continue; }
+        const r = IDX.recs["x:" + s.rid]; if (!r) { li++; continue; }
+        const shift = s.shift = Math.max(0, Math.min(r.n - 30, s.shift || 0));
+        const n = { name: `node-${LETTERS[li++]}`, rec: "x:" + s.rid, gpus: r.gpus, gpu: r.gpu, off: shift, len: r.n - shift, label: r.run };
+        W.nodes.push(n); durs.push(n.len); continue; }
+      const c = clipOf(sideCell(s));
       const ns = c.nodes.map(([nm, rec]) => nodeOf([`node-${LETTERS[li++]}${nm.includes(" · ") ? " · " + nm.split(" · ")[1] : ""}`, rec], c.at, c.before));
-      W.nodes.push(...ns); durs.push(Math.min(...ns.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off))); }
-    W.dur = Math.min(...durs); }
+      // the row's offset slides its clip within the recording: back to see what came before, on to skip ahead;
+      // kept to what the recording holds, with at least a minute left (his ask, 2026-11-21)
+      const lo = Math.max(...ns.map(n => -n.off)), hi = Math.min(...ns.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off - 60));
+      s.shift = Math.max(lo, Math.min(hi, s.shift || 0));
+      ns.forEach(n => { n.off += s.shift; n.len = IDX.recs[n.rec].mark[c.to] + c.after - n.off; });
+      W.nodes.push(...ns); durs.push(Math.min(...ns.map(n => n.len))); }
+    // With a live node there is no end: recorded nodes loop beside it, each over its own clip.
+    if (W.live) { W.dur = null; W.nodes.forEach(n => { if (!n.live) n.loop = n.len; }); }
+    // A recording made on this page can be any length: the longest row sets the length and shorter ones loop, so a
+    // short recording doesn't cut the others short. The built-in clips are all 11 to 16 minutes: the shortest sets it.
+    else if (W.nodes.some(n => n.rec && n.rec.startsWith("x:"))) { W.dur = Math.max(...durs); W.nodes.forEach(n => { if (n.len < W.dur) n.loop = n.len; }); }
+    else W.dur = durs.length ? Math.min(...durs) : 60; }
   else { const c = cellOf(KIND[st.raw]); W.nodes = c.nodes.map(q => nodeOf(q, c.at, c.before)); W.cell = c;
     W.dur = c.to ? Math.min(...W.nodes.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off)) : IDX.recs[c.nodes[0][1]].n - W.nodes[0].off; }
   _rw = { key, W }; return W;
@@ -352,29 +397,40 @@ const KEYS = ["power", "tensor", "hbm_bw", "nvlink", "pcie_tx", "net_tx"];   // 
 // fine: read the 10 Hz file if it is loaded and holds this reading (the network row exists at 1 Hz only).
 function metric(W, n, g, t, key, fine) {
   if (W.fake) return fakeMetric(n, g, t, key);
-  const nd = W.nodes[n], f = fine && REC10[nd.rec], r = f && f.s[key] ? f : REC[nd.rec]; if (!r) return 0;
+  const nd = W.nodes[n];
+  if (nd.live) return liveVal(nd.live, g, key, (st.liveT0 ?? 0) + t);   // on the box's own clock
+  if (nd.loop) t = t < 0 ? 0 : t % nd.loop;
+  const f = fine && REC10[nd.rec], r = f && f.s[key] ? f : REC[nd.rec]; if (!r) return 0;
   const hz = r.hz || 1;
   return (r.s[key][g] || r.s[key][0])[Math.max(0, Math.min(r.n * hz - 1, Math.floor((t + nd.off) * hz)))] / IDX.scale[key];
 }
-const gpuName = W => W.fake ? "B200" : IDX.recs[W.nodes[0].rec].gpu;
+const gpuName = W => W.fake ? "B200" : (W.nodes[0] && (W.nodes[0].gpu || (IDX.recs[W.nodes[0].rec] || {}).gpu)) || "H200";
 // The Telemetry pane's label beside each node: what it is and what it was really running (his ask, 2026-11-17: friends
 // couldn't tell which node trains). Every recording is one or the other; recording ids start p (pretraining) or i (inference).
-const nodeLabel = (W, n) => `${n.gpus} × ${gpuName(W)}` + (n.rec ? (n.rec[0] === "p" ? " (pretraining)" : " (inference)") : "");
+// A connected box shows the name the reader gave it (or "live"); a recording made on this page, its saved name.
+const nodeLabel = (W, n) => `${n.gpus} × ${esc(n.gpu || gpuName(W))}` + (n.label ? ` (${esc(n.label)})` : n.live ? " (live)"
+  : n.rec && !n.rec.startsWith("x:") ? (n.rec[0] === "p" ? " (pretraining)" : " (inference)") : "");
 // the power axis of the lanes: Blackwell cards reach 1 kW, Hopper cards 700 W
 const laneScale = W => /B[23]00/.test(gpuName(W)) ? { max: 1300, grid: 1000, label: "1 kW", busy: 300 } : { max: 800, grid: 500, label: "500 W", busy: 200 };
 // what the recording was doing t seconds into the clip, from its own marks and the trainer's log
 // One entry per distinct phase: a dot in each such node's colour, then grey text (his pick, 2026-11-12). Always dotted,
 // even with one node or when every node is doing the same thing.
 const BOXC = ["#2a78d6", "#eb6834", "#1baf7a", "#7f5af0", "#d6a419", "#d6467e", "#2fb5c9", "#8a6d4a"];   // live.js's box colours
+function phaseOf(n, t) {
+  if (n.live) return "live";
+  const r = IDX.recs[n.rec]; if (!r) return "";
+  if (n.loop) t = t < 0 ? 0 : t % n.loop;
+  let s = ""; for (const [pt, name] of r.phases) if (pt <= t + n.off) s = name; return s;
+}
 function phaseHTML(W, t) {
   if (W.fake) return "";
-  const names = W.nodes.map(n => { let s = ""; for (const [pt, name] of IDX.recs[n.rec].phases) if (pt <= t + n.off) s = name; return s; });
+  const names = W.nodes.map(n => phaseOf(n, t));
   const by = new Map(); names.forEach((q, i) => { if (q) (by.get(q) || by.set(q, []).get(q)).push(i); });
   return [...by].map(([q, ix]) => `<span>${ix.map(i => `<span class="pd" style="background:${BOXC[i % BOXC.length]}"></span>`).join("")}${esc(q)}</span>`).join("");
 }
 function phaseAt(W, t) {
   if (W.fake) return "";
-  const names = W.nodes.map(n => { let s = ""; for (const [pt, name] of IDX.recs[n.rec].phases) if (pt <= t + n.off) s = name; return s; });
+  const names = W.nodes.map(n => phaseOf(n, t));
   return names.every(q => q === names[0]) ? names[0] : W.nodes.map((n, i) => `${n.name.split(" ")[0]}: ${names[i]}`).join(" · ");
 }
 // a broken rule is a stretch [a, b): is it broken at `now`, and what did the rule say then
@@ -405,7 +461,7 @@ function teleData(list) {
     const h = { slot: slot++, label: nodeLabel(W, n), replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} };
     for (const k of KEYS) h.mean[k] = [];
     for (let g = 0; g < n.gpus; g++) { h.gpus[g] = {}; for (const k of KEYS) h.gpus[g][k] = []; }
-    const hz = !W.fake && REC10[n.rec] ? 10 : 1, t1 = Math.floor(t * hz) / hz;   // one point per stored reading, on its own time
+    const hz = !W.fake && (REC10[n.rec] || n.live) ? 10 : 1, t1 = Math.floor(t * hz) / hz;   // one point per stored reading, on its own time
     for (let i = 60 * hz; i >= 0; i--) for (const k of KEYS) { const back = i / hz;
       let a = 0; for (let g = 0; g < n.gpus; g++) { const v = metric(W, ni, g, t1 - back, k, hz > 1); h.gpus[g][k].push([t1 - back, v]); a += v; }
       h.mean[k].push([t1 - back, a / n.gpus]);
@@ -436,7 +492,52 @@ const TYPE = { inference: "#2a78d6", pretraining: "#3f8f5b" }, RED = "#d03b3b", 
 // Settled so far: square panels, a Readings menu, and two steps (see the telemetry first, then check it).
 const st = { mode: "raw" /* raw = step 1 | check = step 2 */, raw: 0, pick: { pre: [0, 0], inf: [0, 0, 1] },
              side: [{ k: "inf", pick: [0, 0, 1] }, { k: "pre", pick: [0, 0] }], ruleOpen: new Set(), noteOpen: false, sacctOpen: false, seg: null /* open menu in Side by side: "row:level" */, zoom: false, howOpen: false, sc: 1, now: 0, paused: false, speed: 12, hold: 0,
-             strips: new Set(["power", "hbm_bw", "nvlink"]), menuOpen: false, box: "none", connectedAt: 0, src: "rec", addOpen: false };
+             strips: new Set(["power", "hbm_bw", "nvlink"]), menuOpen: false, box: "none", connectedAt: 0, src: "rec", addOpen: false,
+             addMenu: false, liveT0: null /* box clock when live watching started */, toast: "" };
+
+// ---------------------------------------------------------------- connected boxes (External box rows)
+// /api/boxes every 2 s: the connected boxes and the recordings made on this page. A live row's readings come from
+// /api/boxes/rows every second and are kept here (box clock, natural units), so the lanes can show the whole watch.
+const BOXES = { boxes: [], recordings: [], ver: 0, sig: "", at: 0 }, LIVEHIST = {};
+function regRecs() { if (IDX) for (const m of BOXES.recordings)
+  IDX.recs["x:" + m.id] = { run: m.name, n: m.n, gpus: m.gpus, gpu: m.gpu, host: m.host, start_utc: new Date(m.started * 1000).toISOString(), phases: [], mark: {} }; }
+async function pollBoxes() {
+  try { const r = await fetch("/api/boxes"); if (!r.ok) return; const d = await r.json();
+    BOXES.boxes = d.boxes; BOXES.recordings = d.recordings; BOXES.at = Date.now();
+    const sig = JSON.stringify([d.boxes.map(b => [b.host, b.gpus, b.gpu, !!b.recording]), d.recordings.map(m => [m.id, m.name, m.n])]);
+    regRecs();
+    if (sig !== BOXES.sig) { BOXES.sig = sig; BOXES.ver++; if (IDX && !(document.activeElement || {}).dataset?.xname) render(); }
+  } catch (e) { /* the node may be restarting: try again next time */ } }
+async function pollLive() {
+  if (!IDX) return;
+  for (const host of new Set(st.side.filter(s => s.k === "ext" && s.mode === "live").map(s => s.host))) {
+    const H = LIVEHIST[host] || (LIVEHIST[host] = { last: 0, s: {} });
+    try { const r = await fetch(`/api/boxes/rows?host=${encodeURIComponent(host)}&since=${H.last}`); if (!r.ok) continue;
+      for (const q of (await r.json()).rows.sort((a, b) => a.t - b.t)) {
+        const put = (k, g, v) => { if (v == null) return; const A = (H.s[k] = H.s[k] || [])[g] || (H.s[k][g] = []); A.push([q.t, v]); if (A.length > 40000) A.splice(0, 4000); };
+        put("power", +q.gpu, q.power_w); put("tensor", +q.gpu, q.tensor_util_pct); put("hbm_bw", +q.gpu, q.dram_bw_util_pct);
+        if (q.nvlink_tx_gb_s != null) put("nvlink", +q.gpu, (q.nvlink_tx_gb_s || 0) + (q.nvlink_rx_gb_s || 0));
+        put("pcie_tx", +q.gpu, q.pcie_tx_gb_s); put("net_tx", 0, q.net_tx_gb_s);
+        if (q.t > H.last) H.last = q.t; }
+    } catch (e) { /* try again next second */ } } }
+// the newest reading at or before box time bt (a gap holds the last value)
+function liveVal(host, g, key, bt) {
+  const H = LIVEHIST[host], A = H && H.s[key] && (key === "net_tx" ? H.s[key][0] : H.s[key][g]);
+  if (!A || !A.length) return 0;
+  if (bt <= A[0][0]) return A[0][1];
+  let lo = 0, hi = A.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (A[m][0] <= bt) lo = m; else hi = m - 1; }
+  return A[lo][1];
+}
+// "now" while watching live: the oldest of the live boxes' newest readings, so no box is drawn past its data
+function liveNow() { const hs = [...new Set(st.side.filter(s => s.k === "ext" && s.mode === "live").map(s => s.host))];
+  const ts = hs.map(h => (LIVEHIST[h] || {}).last || 0); return ts.length && ts.every(Boolean) ? Math.min(...ts) : null; }
+function newExt() {   // a new External box row: the first connected box not already shown live, else a recording
+  const taken = new Set(st.side.filter(s => s.k === "ext" && s.mode === "live").map(s => s.host));
+  const b = BOXES.boxes.find(x => !taken.has(x.host)) || BOXES.boxes[0];
+  if (b) return { k: "ext", host: b.host, mode: "live", rid: null, name: "", shift: 0 };
+  const m = BOXES.recordings[0];
+  return m ? { k: "ext", host: m.host, mode: "rec", rid: m.id, name: "", shift: 0 } : null;
+}
 const isLive = () => st.box === "connected" && st.src === "live";
 const world = () => st.mode === "raw" ? rawWorld() : IDX.scenarios[st.sc];
 const cur = () => isLive() ? { W: LIVE, t: 200 + (Date.now() - st.connectedAt) / 1000, live: true } : { W: world(), t: st.now };
@@ -446,20 +547,25 @@ const pane = (title, body, right = "", attrs = "") => `<section class="pane"${at
 // Workload pills, then one row per lever. An option nobody has recorded is dimmed and cannot be chosen; one recorded
 // only in another combination is muted, and choosing it moves the other levers to the nearest recorded combination.
 function pillsRaw(on) {
-  const kind = KIND[st.raw], K = kind && KINDS[kind], W = rawWorld(), c = W.cell, r0 = IDX.recs[W.nodes[0].rec];
-  const clip = n => { const r = IDX.recs[n.rec]; return `${esc(n.name)}: ${mmss(n.off)} to ${mmss(n.off + W.dur)} of a ${Math.round(r.n / 60)}-minute recording, <code>${esc(r.run)}</code>`; };
+  const kind = KIND[st.raw], K = kind && KINDS[kind], W = rawWorld(), c = W.cell;
+  const n0 = W.nodes.find(n => n.rec && !n.rec.startsWith("x:")), r0 = n0 && IDX.recs[n0.rec], ext = st.raw === 2 && st.side.some(q => q.k === "ext");
+  const clip = n => { if (n.live) return `${esc(n.name)}: live from ${esc(n.live)}`;
+    const r = IDX.recs[n.rec]; if (!r) return `${esc(n.name)}: loading`;
+    const len = W.dur ?? n.len, x = n.rec.startsWith("x:");
+    return `${esc(n.name)}: ${mmss(n.off)} to ${mmss(n.off + len)} of ${x ? `“${esc(r.run)}”, a ${dur(r.n)} recording of ${esc(r.host)} made on this page` : `a ${Math.round(r.n / 60)}-minute recording, <code>${esc(r.run)}</code>`}${n.loop ? ", looping" : ""}`; };
   const code = c ? (kind === "pre" ? [ghA("setup.py#L110", "TorchTitan recipe (setup.py)"), ghA("recording/rec.sh", "rec.sh (train_run)")]
       : [...new Set(c.nodes.map(([, rec]) => ({ i1: "tp8", i5: "tp8", i2: "ep8", i4: "ep8", i3p: "pd_prefill", i3d: "pd_decode" })[rec]))].map(f => ghA(`recording/server/${f}.sh`))
           .concat(c.nodes.length > 1 ? [ghA("recording/pd.sh")] : [], [ghA("recording/rec.sh", "rec.sh (serve_run)")]))
     : [ghA("recording/README.md", "recording scripts")];
-  const rows = [["Box", `${ONE_NODE_RENTALS.has(r0.host) ? `a one-node rental, 8 × ${esc(r0.gpu)}` : `${W.nodes.length > 1 ? "two nodes" : "one node"} of a two-node rental, 8 × ${esc(r0.gpu)} each`}, ${esc(r0.start_utc.slice(0, 10))}`],
+  const rows = [...(r0 ? [["Box", `${ONE_NODE_RENTALS.has(r0.host) ? `a one-node rental, 8 × ${esc(r0.gpu)}` : `${W.nodes.length > 1 ? "two nodes" : "one node"} of a two-node rental, 8 × ${esc(r0.gpu)} each`}, ${esc(r0.start_utc.slice(0, 10))}`]] : []),
+    ...(ext ? [["Your boxes", "a live row reads your box's collector as it streams; a recorded one is a stretch you saved with Record. While any row is live, the recorded rows loop beside it"]] : []),
     ...(c ? c.how : [["Recordings", "made at different times on the two nodes of one rental, lined up here to start together"]]),
     // the trimmed warm-up, said where the recording is described (his ask, 2026-11-17)
     ...((c ? kind === "inf" : st.side.some(s => s.k === "inf")) ? [["Warm-up", "before the measured load, the load generator fills the server’s cache: long prompts in, one token out. " +
       (c ? warmText(Math.round(IDX.recs[c.nodes[0][1]].mark[c.at] - IDX.recs[c.nodes[0][1]].mark[c.at.replace("load_", "warm_")]))
           : `Each serving clip keeps its last ${WARM_S} s`)]] : []),
     ["Clip", W.nodes.map(clip).join("<br>")], ["Readings", "last minute: 10 a second, the counters as polled and power as the mean of 2 polls. Whole clip, the lanes and the rules: 1-second means"],
-    ["Code", code.concat([ghA("recording/logger.py"), ghA("recording/extras.py"), ghA("make_replay_data.py", "make_replay_data.py (recording → this page)")]).join(" · ")]];
+    ["Code", code.concat(ext ? [ghA("collector.py")] : [], [ghA("recording/logger.py"), ghA("recording/extras.py"), ghA("make_replay_data.py", "make_replay_data.py (recording → this page)")]).join(" · ")]];
   const menu = `<details class="menu" id="how"${st.howOpen ? " open" : ""}><summary>How it was recorded</summary><div class="how">
       ${rows.map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("")}<span><a href="/walkthrough">Run it yourself →</a></span></div></details>`;
   const has = (L, i, exact) => K.cells.some(q => q.pick[L] === i && (!exact || q.pick.every((v, j) => j === L || v === st.pick[kind][j])));
@@ -469,24 +575,51 @@ function pillsRaw(on) {
 }
 function sideRows() {
   let li = 0; const total = sideNodes(st.side), C = window.BOX_COLORS || ["#2a78d6", "#eb6834", "#1baf7a", "#7f5af0"];
-  const rows = st.side.map((s, i) => { const K = KINDS[s.k], c = sideCell(s), first = li, w = c.nodes.length; li += w;
+  const extOK = BOXES.boxes.length > 0 || BOXES.recordings.length > 0;
+  const kindPop = (i, cur, w) => `<div class="pop">` + ["pre", "inf", "ext"].map(k => {
+      const need = k === "ext" ? 1 : KINDS[k].cells[0].nodes.length, ok = (k === cur || total - w + need <= SIDE_MAX) && (k !== "ext" || extOK);
+      return `<button data-sk="${i}:${k}" class="${k === cur ? "on" : ""}"${ok ? "" : ` disabled title="${k === "ext" ? "connect a box first: ＋ Add your GPUs" : `at most ${SIDE_MAX} nodes`}"`}>${KTITLE[k]}</button>`; }).join("") + `</div>`;
+  // the offset: slide this row's clip earlier or later within its recording (his ask, 2026-11-21). 0 = where the clip starts today.
+  const shiftCtl = (i, s) => { const v = s.shift || 0;
+    return `<span class="shift" title="Slide this clip earlier or later within its recording, to line it up with the other rows. ‹ › move 10 s; with Shift, 1 minute. Click the time to reset.">` +
+      `<button data-shift="${i}:-10">‹</button><button class="sv${v ? " moved" : ""}" data-shift="${i}:0">${v ? (v > 0 ? "+" : "−") + mmss(Math.abs(v)) : "±00:00"}</button><button data-shift="${i}:10">›</button></span>`; };
+  const rows = st.side.map((s, i) => { const first = li, w = sideW(s); li += w;
     const name = w > 1 ? `node-${LETTERS[first]}+${LETTERS[first + 1]}` : `node-${LETTERS[first]}`;
-    const sw = c.nodes.map((_, j) => `<span class="sw" style="background:${C[(first + j) % C.length]}"></span>`).join("");
+    const sw = Array.from({ length: w }, (_, j) => `<span class="sw" style="background:${C[(first + j) % C.length]}"></span>`).join("");
     const isOpen = L => st.seg === `${i}:${L}`;
-    const kinds = `<span class="sseg first${isOpen(-1) ? " open" : ""}"><button data-sseg="${i}:-1">${KTITLE[s.k]}</button>${isOpen(-1) ? `<div class="pop">` +
-      ["pre", "inf"].map(k => { const ok = k === s.k || total - w + KINDS[k].cells[0].nodes.length <= SIDE_MAX;
-        return `<button data-sk="${i}:${k}" class="${k === s.k ? "on" : ""}"${ok ? "" : ` disabled title="at most ${SIDE_MAX} nodes"`}>${KTITLE[k]}</button>`; }).join("") + `</div>` : ""}</span>`;
+    const kinds = `<span class="sseg first${isOpen(-1) ? " open" : ""}"><button data-sseg="${i}:-1">${KTITLE[s.k]}</button>${isOpen(-1) ? kindPop(i, s.k, w) : ""}</span>`;
+    const rm = st.side.length > 1 ? `<button class="srm" data-srm="${i}" title="remove">×</button>` : "<span></span>";
+    if (s.k === "ext") {
+      const box = BOXES.boxes.find(b => b.host === s.host), recs = BOXES.recordings.filter(m => m.host === s.host), rec = recs.find(m => m.id === s.rid);
+      const hosts = [...new Set([...BOXES.boxes.map(b => b.host), ...BOXES.recordings.map(m => m.host)])];
+      const boxSeg = `<span class="sep">›</span><span class="sseg${isOpen(0) ? " open" : ""}"><button data-sseg="${i}:0">${esc(s.host)}${box ? ` · ${box.gpus} × ${esc(box.gpu)}` : ""}</button>${isOpen(0) ? `<div class="pop"><div class="g">Boxes</div>` +
+        hosts.map(h => { const b = BOXES.boxes.find(x => x.host === h), n = BOXES.recordings.filter(m => m.host === h).length;
+          return `<button data-xhost="${i}:${esc(h)}" class="${h === s.host ? "on" : ""}">${esc(h)}<small>${b ? "connected" : ""}${b && n ? " · " : ""}${n ? `${n} recorded` : ""}</small></button>`; }).join("") + `</div>` : ""}</span>`;
+      const modeSeg = `<span class="sep">›</span><span class="sseg${isOpen(1) ? " open" : ""}"><button data-sseg="${i}:1">${s.mode === "live" ? `<span class="xdot"></span>Live` : "Recorded"}</button>${isOpen(1) ? `<div class="pop">` +
+        `<button data-xmode="${i}:live" class="${s.mode === "live" ? "on" : ""}"${box ? "" : ` disabled title="this box isn't connected right now"`}>Live<small>${box ? "what the box is doing now" : "not connected"}</small></button>` +
+        `<div class="g">Recordings of this box</div>` + (recs.length ? recs.map(m => `<button data-xrec="${i}:${m.id}" class="${s.mode === "rec" && m.id === s.rid ? "on" : ""}">${esc(m.name)}<small>${mmss(m.n)} · ${new Date(m.started * 1000).toTimeString().slice(0, 5)}</small></button>`).join("")
+          : `<div class="none">none yet: use Record while it's live</div>`) +
+        (s.mode === "rec" && rec ? `<div class="divl"></div><button class="danger" data-xdel="${i}">Delete “${esc(rec.name)}”</button>` : "") + `</div>` : ""}</span>`;
+      const val = s.mode === "live" ? s.name || "" : rec ? rec.name : "";
+      const nameBox = `<span class="sep">›</span><input class="xname" data-xname="${i}" value="${esc(val)}" placeholder="name your workload" title="${s.mode === "live" ? "A label for this box; also the name a recording is saved under" : "Rename this recording"}">`;
+      const tail = s.mode === "live" ? `<button class="recbtn" data-recbtn="${i}"></button>` : shiftCtl(i, s);
+      return `<div class="srow"><span class="nn">${sw}${name}</span><span class="segs">${kinds}${boxSeg}${modeSeg}${nameBox}${tail}</span>${rm}</div>`; }
+    const K = KINDS[s.k];
     const levels = K.levers.map((lv, L) => `<span class="sep">›</span><span class="sseg${isOpen(L) ? " open" : ""}"><button data-sseg="${i}:${L}">${esc(SHOW[s.k][L](lv.opts[s.pick[L]]))}</button>${isOpen(L) ? `<div class="pop"><div class="g">${esc(lv.label)}</div>` +
       lv.opts.map((o, j) => { const q = nearest(s.k, s.pick, L, j), exact = q && q.pick.every((v, m) => m === L || v === s.pick[m]);
         const fits = q && total - w + q.nodes.length <= SIDE_MAX;
         const tip = !q ? "not recorded yet" : !fits ? `at most ${SIDE_MAX} nodes` : exact ? "" : "recorded in another combination; the other choices in this row will change";
         return `<button data-sopt="${i}:${L}:${j}" class="${j === s.pick[L] ? "on" : q && !exact ? "far" : ""}"${!q || !fits ? " disabled" : ""}${tip ? ` title="${tip}"` : ""}>${esc(o)}${!q ? "<small>soon</small>" : ""}</button>`; }).join("") + `</div>` : ""}</span>`).join("");
-    return `<div class="srow"><span class="nn">${sw}${name}</span><span class="segs">${kinds}${levels}</span>${st.side.length > 1 ? `<button class="srm" data-srm="${i}" title="remove">×</button>` : "<span></span>"}</div>`; }).join("");
-  return `<div class="sidelist">${rows}${total < SIDE_MAX ? `<button class="sadd" data-sadd>＋ Add a node</button>` : ""}</div>`;
+    return `<div class="srow"><span class="nn">${sw}${name}</span><span class="segs">${kinds}${levels}${shiftCtl(i, s)}</span>${rm}</div>`; }).join("");
+  const add = total < SIDE_MAX ? `<span class="sseg addwrap${st.addMenu ? " open" : ""}"><button class="sadd" data-sadd>＋ Add a node</button>${st.addMenu ? `<div class="pop">` +
+    [["pre", "Pretraining", "TorchTitan, Llama 3 8B · recorded"], ["inf", "Inference", "vLLM, DeepSeek V4.1 Flash · recorded"],
+     ["ext", "External box", extOK ? [BOXES.boxes.length ? `${BOXES.boxes.length} connected` : "", BOXES.recordings.length ? `${BOXES.recordings.length} recorded` : ""].filter(Boolean).join(" · ") : "connect a box first: ＋ Add your GPUs"]]
+      .map(([k, t, sub]) => `<button data-addk="${k}"${k === "ext" && !extOK ? " disabled" : ""}><span><b>${t}</b><small class="sub">${sub}</small></span></button>`).join("") + `</div>` : ""}</span>` : "";
+  return `<div class="sidelist">${rows}${add}${st.toast ? `<p class="xtoast">${st.toast}</p>` : ""}</div>`;
 }
 function sideSet(f) { f(); st.seg = null; st.now = 0; st.paused = false; render(); }
 // clicking anywhere outside an open menu closes it
-document.addEventListener("click", e => { if (st.seg != null && !e.target.closest(".sseg")) { st.seg = null; render(); } });
+document.addEventListener("click", e => { if ((st.seg != null || st.addMenu) && !e.target.closest(".sseg")) { st.seg = null; st.addMenu = false; render(); } });
 function pickLever(L, i) {
   const kind = KIND[st.raw], cur = st.pick[kind], score = q => q.pick.filter((v, j) => v === cur[j]).length;
   const best = KINDS[kind].cells.filter(q => q.pick[L] === i).sort((a, b) => score(b) - score(a))[0];
@@ -496,19 +629,23 @@ const KWORD = { caught: "Caught.", missed: "Missed.", "false alarm": "False alar
 const scNote = sc => `<p class="scnote"><b>${esc(sc.blurb)}</b> ` + sc.result.map(q => `<span class="k-${q.kind.split(" ")[0]}">${KWORD[q.kind]}</span> ${esc(q.text)}`).join(" ") + ` <span class="played">Playing: ${esc(sc.played)}. Verdicts from the real rules, run over the recordings by ${ghA("make_replay_data.py")}.</span></p>`;
 const pillsSC = on => `<div class="pills">${IDX.scenarios.map((s, i) => `<button data-sc="${i}" class="${on && !isLive() && i === st.sc ? "on" : ""}">${esc(s.name)}</button>`).join("")}` +
   (st.box === "connected" ? `<button data-src="live" class="${isLive() ? "on" : ""}"><span class="livedot"></span>your-box</button>` : "") + `</div>` + (isLive() ? "" : scNote(IDX.scenarios[st.sc]));
-const transport = () => isLive() ? "" : `<div class="transport"><button class="playbtn" id="play"></button><span class="time" id="ttime"></span>
+// While a node is live the bar can't pause, scrub or speed up (his note, 2026-11-21): time runs at the box's own pace,
+// recorded rows loop beside it, and "Restart recordings" starts them all again from the top of their clips.
+const transport = () => isLive() ? "" : (st.mode === "raw" && world().live) ? `<div class="transport livebar"><span class="livedot"></span><b class="lv">LIVE</b><span class="time" id="ttime"></span>
+     <span class="lnote">Recorded rows loop beside your box. Live can't be paused or sped up; slide a row with ‹ › to line it up.</span><span class="grow"></span>
+     <button class="btn quiet" data-act="restart" title="Start every recorded row from the top of its clip, now">↺ Restart recordings</button></div><div class="phase" id="phase"></div>` : `<div class="transport"><button class="playbtn" id="play"></button><span class="time" id="ttime"></span>
      <input type="range" id="scrub" min="0" max="${world().dur}" step="1">
      <div class="seg sp">${[4, 12, 30].map(x => `<button data-x="${x}" class="${x === st.speed ? "on" : ""}">×${x}</button>`).join("")}</div></div><div class="phase" id="phase"></div>`;
 const ALL_R = [["power", "Power"], ["hbm_bw", "HBM bandwidth"], ["nvlink", "NVLink traffic"], ["tensor", "Tensor cores busy"], ["net_tx", "Network between nodes"]];
 const cb = ([k, n]) => `<label class="cb"><input type="checkbox" data-strip="${k}"${st.strips.has(k) ? " checked" : ""}>${n}</label>`;
-const zoomSeg = () => isLive() ? "" : `<div class="seg zm"><button data-zoom="0" class="${st.zoom ? "" : "on"}">Last minute</button><button data-zoom="1" class="${st.zoom ? "on" : ""}">Whole clip</button></div>`;
+const zoomSeg = () => isLive() || (st.mode === "raw" && world().live) ? "" : `<div class="seg zm"><button data-zoom="0" class="${st.zoom ? "" : "on"}">Last minute</button><button data-zoom="1" class="${st.zoom ? "on" : ""}">Whole clip</button></div>`;
 const telePane = () => pane("Telemetry", `<div id="tele"></div>`, zoomSeg() + `<details class="menu"${st.menuOpen ? " open" : ""}><summary>Readings</summary><div>${ALL_R.map(cb).join("")}</div></details>`);
 function steps() {
-  const s3 = st.box === "connected"
-    ? `<b><span class="livedot"></span>your-box is streaming</b><p>mock-up: made-up readings · 8 × B200 · 1 Slurm job declared</p>
-       <p><button class="btn primary" data-act="watch">Watch it live</button> <button class="btn quiet" data-act="disconnect">Disconnect</button></p>`
-    : `<b><span class="pulse"></span>Listening for your box…</b><p>It appears here by itself once the collector starts.</p>
-       <p><span class="mockonly" data-act="connect">mock: pretend a box connects</span></p>`;
+  const bs = BOXES.boxes;
+  const s3 = bs.length
+    ? `<b><span class="livedot"></span>${esc(bs.map(b => b.host).join(", "))} ${bs.length > 1 ? "are" : "is"} streaming</b><p>Watch it live beside the recordings, or record a stretch of it.</p>
+       <p><button class="btn primary" data-act="addlive">Show it side by side</button></p>`
+    : `<b><span class="pulse"></span>Listening for your box…</b><p>It appears here by itself once the collector starts.</p>`;
   return `<div class="steps">
     <div class="step"><span class="n">1</span><div><b>Rent an 8× H200 or 8× B200 box</b><p>The only GPUs tested so far. Allow about an hour the first time; most of it is downloads.</p></div></div>
     <div class="step"><span class="n">2</span><div><b>Run this on the box</b><pre>curl -fsSu :$P https://twc-verification-node.fly.dev/setup.py -o /tmp/setup.py &amp;&amp; python3 /tmp/setup.py</pre>
@@ -587,10 +724,31 @@ function bind() {
   const rl = $("#rules"); if (rl) rl.onclick = e => { const r = e.target.closest("[data-rule]"); if (!r) return; const k = r.dataset.rule;
     st.ruleOpen.has(k) ? st.ruleOpen.delete(k) : st.ruleOpen.add(k); paint(); };
   on("[data-sseg]", b => { st.seg = st.seg === b.dataset.sseg ? null : b.dataset.sseg; render(); });
-  on("[data-sk]", b => { const [i, k] = b.dataset.sk.split(":"), s = st.side[+i]; sideSet(() => { if (s.k !== k) { s.k = k; s.pick = [...KINDS[k].cells[0].pick]; } }); });
+  on("[data-sk]", b => { const [i, k] = b.dataset.sk.split(":"); sideSet(() => { if (st.side[+i].k !== k) st.side[+i] = k === "ext" ? newExt() : { k, pick: [...KINDS[k].cells[0].pick], shift: 0 }; }); });
+  on("[data-addk]", b => { const k = b.dataset.addk, row = k === "ext" ? newExt() : { k, pick: [...KINDS[k].cells[0].pick], shift: 0 }; st.addMenu = false; if (row) sideSet(() => st.side.push(row)); });
+  on("[data-shift]", (b, e) => { const [i, d] = b.dataset.shift.split(":").map(Number), s = st.side[i]; s.shift = d ? (s.shift || 0) + d * (e.shiftKey ? 6 : 1) : 0; e.stopPropagation(); render(); });
+  on("[data-xhost]", b => { const [i, ...h] = b.dataset.xhost.split(":"), host = h.join(":"), s = st.side[+i], box = BOXES.boxes.find(x => x.host === host), m = BOXES.recordings.find(x => x.host === host);
+    sideSet(() => { s.host = host; if (box) { s.mode = "live"; } else if (m) { s.mode = "rec"; s.rid = m.id; } }); });
+  on("[data-xmode]", b => { const s = st.side[+b.dataset.xmode.split(":")[0]]; sideSet(() => { s.mode = "live"; }); });
+  on("[data-xrec]", b => { const [i, id] = b.dataset.xrec.split(":"), s = st.side[+i]; sideSet(() => { s.mode = "rec"; s.rid = id; s.shift = 0; }); });
+  on("[data-xdel]", async b => { const s = st.side[+b.dataset.xdel], m = BOXES.recordings.find(x => x.id === s.rid); if (!m || !confirm(`Delete the recording “${m.name}”? This can't be undone.`)) return;
+    await fetch(`/api/recordings/${m.id}/delete`, { method: "POST" }); await pollBoxes();
+    const other = BOXES.recordings.find(x => x.host === s.host), box = BOXES.boxes.find(x => x.host === s.host);
+    sideSet(() => { if (box) s.mode = "live"; else if (other) s.rid = other.id; else st.side.splice(st.side.indexOf(s), 1); }); });
+  // the name box: a live row's label (and the name a recording gets); a recorded row's name, renamed on the node
+  on("[data-xname]", b => { const s = st.side[+b.dataset.xname]; if (s.mode === "live") s.name = b.value.slice(0, 80); }, "oninput");
+  on("[data-xname]", async b => { const s = st.side[+b.dataset.xname]; if (s.mode === "rec" && b.value.trim()) {
+    await fetch(`/api/recordings/${s.rid}/rename`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: b.value.trim() }) }); await pollBoxes(); } }, "onchange");
+  on("[data-xname]", (b, e) => { if (e.key === "Enter") b.blur(); }, "onkeydown");
+  on("[data-recbtn]", async b => { const s = st.side[+b.dataset.recbtn], box = BOXES.boxes.find(x => x.host === s.host); if (!box) return;
+    const json = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ host: s.host, name: s.name }) };
+    if (box.recording) { const r = await (await fetch("/api/recordings/stop", json)).json();
+      st.toast = r.ok ? `Saved “${esc(r.recording.name)}” (${mmss(r.recording.n)}). It's under Recorded for ${esc(s.host)}.` : `Not saved: ${esc(r.error || "unknown error")}`; }
+    else { await fetch("/api/recordings/start", json); st.toast = ""; }
+    await pollBoxes(); render(); });
   on("[data-sopt]", b => { const [i, L, j] = b.dataset.sopt.split(":").map(Number), s = st.side[i], q = nearest(s.k, s.pick, L, j); if (q) sideSet(() => { s.pick = [...q.pick]; }); });
   on("[data-srm]", b => sideSet(() => st.side.splice(+b.dataset.srm, 1)));
-  on("[data-sadd]", () => sideSet(() => st.side.push({ k: "pre", pick: [...KINDS.pre.cells[0].pick] })));
+  on("[data-sadd]", (b, e) => { e.stopPropagation(); st.addMenu = !st.addMenu; st.seg = null; render(); });
   on("[data-zoom]", b => setZoom(b.dataset.zoom === "1"));
   const how = $("#how"); if (how) how.ontoggle = () => { st.howOpen = how.open; };
   on("[data-raw]", b => { st.raw = +b.dataset.raw; st.mode = "raw"; st.src = "rec"; st.now = 0; st.paused = false; render(); });
@@ -615,6 +773,9 @@ function act(a) {
   else if (a === "connect") { st.box = "connected"; st.connectedAt = Date.now(); }
   else if (a === "disconnect") { st.box = "none"; st.src = "rec"; }
   else if (a === "watch") { st.src = "live"; st.mode = "check"; st.addOpen = false; }
+  else if (a === "restart") { st.liveT0 = liveNow(); st.now = 0; }
+  else if (a === "addlive") { const row = newExt(); st.mode = "raw"; st.raw = 2; st.addOpen = false; st.box = "none"; st.src = "rec";
+    if (row && sideNodes(st.side) < SIDE_MAX) st.side.push(row); else if (row) st.side[st.side.length - 1] = row; }
   render();
 }
 
@@ -855,14 +1016,20 @@ function paint() {
   if (play) play.textContent = st.paused ? "▶" : "❚❚";
   if (scrub && document.activeElement !== scrub) scrub.value = st.now;
   if (scrub) scrub.style.setProperty("--p", (100 * st.now / (+scrub.max || 1)).toFixed(2) + "%");
-  if (tt) tt.textContent = `${mmss(st.now)} / ${mmss(world().dur)}`;
+  if (tt) tt.textContent = world().dur == null ? `${mmss(st.now)} watched` : `${mmss(st.now)} / ${mmss(world().dur)}`;
+  document.querySelectorAll("[data-recbtn]").forEach(b => { const s = st.side[+b.dataset.recbtn], box = BOXES.boxes.find(x => x.host === s.host), r = box && box.recording;
+    const h = r ? `<span class="d"></span>Recording ${mmss(r.since_s + (Date.now() - BOXES.at) / 1000)} · Stop` : `<span class="d"></span>Record`;
+    if (b._h !== h) { b.innerHTML = h; b._h = h; b.classList.toggle("on", !!r); } });
   if (clock) clock.textContent = new Date().toTimeString().slice(0, 8);
   paintTele($("#tele"), [{ W, t, live }]); paintTL($("#tl"), W, t); paintRules($("#rules"), W, t); paintArch(W, t); paintSacct(W, t);
 }
 let last = performance.now();
 setInterval(() => {
   const t = performance.now(), dt = (t - last) / 1000; last = t;
-  if (!st.paused && IDX) {
+  if (IDX && !isLive() && st.mode === "raw" && rawWorld().live) {   // live: time is the box's own; nothing to pause or speed up
+    const ln = liveNow(); if (ln != null) { if (st.liveT0 == null) st.liveT0 = ln; st.now = Math.max(0, ln - st.liveT0); }
+  } else if (!st.paused && IDX) {
+    if (st.liveT0 != null) { st.liveT0 = null; st.now = 0; }   // the last live row went away: play the recordings again
     if (st.now >= world().dur) { st.hold += dt; if (st.hold > 3) { st.now = 0; st.hold = 0; } }
     else st.now = Math.min(world().dur, st.now + dt * st.speed);
   }
@@ -870,7 +1037,8 @@ setInterval(() => {
 }, 200);
 addEventListener("resize", paint);
 render();
-fetch(DATA + "index.json").then(r => r.json()).then(d => { d.scenarios.forEach(q => { q.extra = []; }); IDX = d; render(); });
+fetch(DATA + "index.json").then(r => r.json()).then(d => { d.scenarios.forEach(q => { q.extra = []; }); IDX = d; regRecs(); render(); });
+pollBoxes(); setInterval(pollBoxes, 2000); setInterval(pollLive, 1000);
 </script>
 </body>
 </html>

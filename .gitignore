@@ -17,3 +17,6 @@ parked-pages/
 mock-ups/
 \[C\]*.md
 torchtitan-pcie-h200.csv
+
+# Recordings of connected boxes made through the Replay page (TWC_DATA_DIR)
+.data/
