@@ -40,7 +40,7 @@ The thresholds separated every recorded workload, with wide margins. None of the
 ## Limits
 
 - **Telemetry is unsigned.** The design assumes the GPU signs telemetry on-die, which current firmware doesn't support. Until then, the operator could spoof the telemetry.
-- **The rules are not red-teamed.** The thresholds are placeholders fit to a handful of runs. Low-power training (an FSDP run at about 187 W) passes under rule 1's floor.
+- **The rules are not red-teamed.** The thresholds are placeholders fit to a handful of runs. Low-power training passes under rule 1's floor: one earlier recording, FSDP with CPU offload on 8× H100, averaged 186 W.
 - **Multi-node is partly simulated.** Most composed scenarios line up recordings made at different times. `collector.py --split` can divide one box into pretend nodes (see [SPLIT_CAVEATS.md](SPLIT_CAVEATS.md)).
 - **The live collector doesn't send network counters yet,** so rule 3 only judges recordings.
 - **Node state lives in memory** on a single machine.

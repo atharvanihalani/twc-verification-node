@@ -92,5 +92,5 @@ The page shows periods, not single evaluations. Each broken rule has a subject: 
 - Only power, tensor-core utilisation and network sent are read. PCIe sent is still collected, but nothing reads it while rule 3's PCIe test is off.
 - Rule 3 judges only boxes whose collector reports network readings: collector v0.5 or later, on a box with RDMA ports (InfiniBand or RoCE Ethernet). On the live node it is judged only while two or more boxes stream; one box alone has nothing to talk to.
 - A split inside one box (its traffic goes over NVLink or PCIe, not the network ports) is not seen by rule 3 while the PCIe test is off.
-- Training that keeps its power under the busy floor (an FSDP run drew about 187 W) is not busy, so rule 1 does not see it.
+- Training that keeps its power under the busy floor is not busy, so rule 1 does not see it. One earlier recording did: FSDP with CPU offload on 8× H100 averaged 186 W in its steady phase (the GPUs wait on the CPU).
 - One patchy GPU reduces coverage for every GPU, because a slot is kept only when all of them have a reading.

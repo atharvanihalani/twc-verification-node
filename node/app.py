@@ -394,12 +394,6 @@ def replay_view():
     return FileResponse(HERE / "pages" / "replay.html", headers=NO_CACHE)
 
 
-@app.get("/api/scenario")
-def api_scenario():
-    # built offline by make_scenario.py (the real rules run over recorded traces); the page plays it back
-    return FileResponse(HERE.parent / "replays" / "scenario-1.json", media_type="application/json", headers=NO_CACHE)
-
-
 @app.get("/api/state")
 def api_state():
     now_t = max((b[-1][0] for b in S.buffers.values() if b), default=None)
@@ -705,7 +699,7 @@ async def api_rec_rename(rid: str, request: Request):
 def api_rec_delete(rid: str):
     if not rec_path(rid, ".meta.json"):
         return JSONResponse({"error": "no such recording"}, status_code=404)
-    for sfx in (".json", ".hz10.json", ".meta.json"):
+    for sfx in (".json", ".hz10.json", ".meta.json", ".judged-none.json", ".judged-inference.json", ".judged-pretraining.json"):
         if (f := rec_path(rid, sfx)):
             f.unlink()
     return {"ok": True}
@@ -938,6 +932,80 @@ def api_slurm():
     boxes = [{"host": host, "label": box_label(h), "age_s": round(now - h["last_seen"], 1),
               "gpus": sorted(int(g) for g in h["gpus"]), "phys": phys(h)} for host, h in sorted(LIVE.items())]   # light list for the Replay page
     return {"now": now, "clusters": clusters, "boxes": boxes, "rules": rules_view()}
+
+
+# ---------------------------------------------------------------- one box, for the Replay page's step 2
+# A connected box in the step-2 table: the Slurm jobs that sit on it and the live rule results on its GPUs, in its own
+# GPU numbers. A recording made on the page: the real rules run over it once per declaration, as make_replay_data.py
+# does for the built-in recordings, and cached next to it.
+@app.get("/api/boxes/judged")
+def api_box_judged(host: str):
+    look, jobs = gpu_lookup(), []
+    for c in SLURM.values():
+        for j in c["jobs"].values():
+            gs = sorted({int(m["gpu"]) for a in j.get("gpus") or [] for i in a.get("idx") or []
+                         if (m := look.get((a.get("node"), i))) and m["host"] == host and m.get("gpu") is not None})
+            if gs and j.get("start") is not None and not j.get("start_is_estimate"):
+                done = j.get("gone_at") or j.get("state") not in ("PENDING", "RUNNING", "COMPLETING", "SUSPENDED", "CONFIGURING")
+                jobs.append({"id": str(j["id"]), "name": j.get("name") or "", "declared": j.get("declared"), "gpus": gs,
+                             "start": j["start"], "end": (j.get("end") or j.get("gone_at")) if done else None})
+    viol = []
+    for v in list(LIVE_RULES["closed"]) + list(LIVE_RULES["open"].values()):
+        gs = sorted({int(g.rsplit(":", 1)[1]) for g in v["gpus"] if g.rsplit(":", 1)[0] == host})
+        mine = [x for x in v["jobs"] if any(j["id"] == str(x) for j in jobs)]
+        if gs or mine:
+            viol.append({"rule": v["rule"], "start": v["start"], "end": None if v in LIVE_RULES["open"].values() else v["end"],
+                         "gpus": gs, "jobs": [str(x) for x in mine], "detail": v.get("last_detail", "")})
+    return {"now": time.time(), "slurm": bool(SLURM), "jobs": jobs, "violations": viol}
+
+
+def rec_judge(rid, decl):
+    """Run the rules over a recording made on the page, with one job of type `decl` (or none) over all its GPUs.
+    Returns stretches like make_replay_data.py's: {rule, a, b, gpus: ["0:g"], jobs: [5001], d: [[t, text]]}."""
+    body = json.loads((REC_DIR / f"{rid}.json").read_text())
+    fine = json.loads((REC_DIR / f"{rid}.hz10.json").read_text())
+    n, G, step = body["n"], len(fine["s"]["power"]), 5.0
+    power = {f"0:{g}": [(i / 10, float(w)) for i, w in enumerate(fine["s"]["power"][g])] for g in range(G)}
+    per_s = lambda k, g: [(i + 0.5, v / REC_SCALE[k]) for i, v in enumerate(body["s"][k][g])]
+    readings = {"tensor_util": {f"0:{g}": per_s("tensor", g) for g in range(G)}, "pcie_sent": {f"0:{g}": per_s("pcie_tx", g) for g in range(G)},
+                "net_sent": {"0": per_s("net_tx", 0)}}
+    meta = json.loads((REC_DIR / f"{rid}.meta.json").read_text())
+    models = {f"0:{g}": meta.get("gpu", "") for g in range(G)}
+    decls = [{"job_id": "5001", "type": decl, "gpus": list(power)}] if decl else []
+    cut = lambda pts, lo, hi: [p for p in pts if lo < p[0] <= hi]
+    open_, done, t = {}, [], step
+    while t <= n:
+        r = rules.evaluate({g: cut(v, t - 61, t) for g, v in power.items()}, decls, sorted(power), t,
+                           {k: {g: cut(q, t - 61, t + 1) for g, q in v.items()} for k, v in readings.items()}, models)
+        now = {}
+        for h in r["hits"]:   # texts as make_replay_data.py writes them, so the page words them the same way
+            q = now.setdefault(h["rule"], {"gpus": set(), "w": [], "text": re.sub(r"^(\d+)", r"Job \1", h["detail"])})
+            q["gpus"] |= set(h["gpus"] or list(power))
+            if h["rule"] == "undeclared_load" and " at " in h["detail"]:
+                q["w"].append(float(h["detail"].split(" at ")[1].split(" W")[0]))
+        for q in now.values():
+            if q["w"]:
+                q["text"] = f"{len(q['gpus'])} GPUs busy with no declared job (avg {sum(q['w']) / len(q['w']):.0f} W)"
+        for k, q in now.items():
+            v = open_.get(k) or open_.setdefault(k, {"rule": k, "a": t, "gpus": set(), "jobs": [5001] if decl else [], "d": []})
+            v["b"], v["gpus"] = t + step, v["gpus"] | q["gpus"]
+            if not v["d"] or v["d"][-1][1] != q["text"]:
+                v["d"].append([t, q["text"]])
+        for k in [k for k in open_ if k not in now]:
+            done.append(open_.pop(k))
+        t += step
+    done += list(open_.values())
+    return [{**v, "gpus": sorted(v["gpus"])} for v in sorted(done, key=lambda v: v["a"])]
+
+
+@app.get("/api/recordings/{rid}/judged")
+def api_rec_judged(rid: str, decl: str = ""):
+    if decl not in ("", "inference", "pretraining") or not rec_path(rid, ".meta.json"):
+        return JSONResponse({"error": "no such recording or declaration"}, status_code=404)
+    cache = REC_DIR / f"{rid}.judged-{decl or 'none'}.json"
+    if not cache.exists():
+        cache.write_text(json.dumps(rec_judge(rid, decl or None), separators=(",", ":")))
+    return FileResponse(cache, media_type="application/json")
 
 
 # ---------------------------------------------------------------- replay feed

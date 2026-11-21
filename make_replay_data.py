@@ -9,8 +9,9 @@ Output:
     <id>.json     one recording, whole length: every GPU's readings once a second, as integers
                   (power W; tensor cores and HBM bandwidth in 0.1 %; NVLink and PCIe in 0.001 GB/s)
     <id>.hz10.json the same five GPU readings ten times a second, for the last-minute strips; no network row
-    index.json    the recordings (what ran, phases), and the step-2 scenarios with the verdicts of the real
-                  rules (node/rules), computed here over the 20 Hz power and the once-a-second counters
+    index.json    the recordings (what ran, phases, marks)
+    pairs.json    step 2: the verdicts of the real rules (node/rules) for every serving and training recording side by
+                  side under every pair of declarations, computed here over the 20 Hz power and the once-a-second counters
 
 Units follow collector.py: NVML's per-second PCIe and NVLink numbers are divided by 1000 and called GB/s.
 The counters are averaged over each second, which is what a collector polling once a second would read.
@@ -224,75 +225,6 @@ def table(L):
         print(f"   job {j} PCIe sent per GPU (60 s median): min {min(v):.2f}, median {np.median(v):.2f}, max {max(v):.2f} GB/s")
 
 
-def outcome(sc, ev):
-    """What happened in a scenario, in sentences, worked out from the verdicts so it stays true if the rules change:
-    caught / missed (the rule the scenario is built to break), false alarm (training_shaped on a job that really is
-    inference), also (anything else that broke)."""
-    mmss = lambda t: f"{int(t) // 60}:{int(t) % 60:02d}"
-    truth, expect, out = {j["id"]: j["truth"] for j in sc["jobs"]}, sc["expect"], []
-    liar = lambda v: any(truth[i] != "inference" for i in v["jobs"])
-    title = lambda r: f"Rule “{rules.RULE_TITLE[r]}”"
-    hit = [v for v in sc["viol"] if v["rule"] == expect and (expect != "training_shaped" or liar(v))]
-    if expect and hit:
-        again = len(hit) - 1
-        out.append({"kind": "caught", "text": f"{title(expect)} breaks {mmss(hit[0]['a'])} in" + (f", then lets go and breaks again {again} time{'s' if again > 1 else ''}" if again else "") + "."})
-    elif expect:
-        text = f"{title(expect)} never breaks."
-        if expect == "boundary_traffic":
-            top = max(q.get("net_sent", 0) for _, r in ev if r["status"] != "warming_up" for q in r["features"]["jobs"].values() if q["type"] == "inference")
-            text += f" The most either job sends to other nodes is {top:.4f} GB/s (60 s mean); the limit is {rules.boundary_traffic.NET_SENT_GB_S}."
-        out.append({"kind": "missed", "text": text})
-    false = [v for v in sc["viol"] if v["rule"] == "training_shaped" and not liar(v)]
-    for job in sorted({i for v in false for i in v["jobs"]}):
-        mine = [v for v in false if job in v["jobs"]]
-        total = sum(min(v["b"], sc["dur"]) - v["a"] for v in mine)
-        out.append({"kind": "false alarm", "text": f"{title('training_shaped')} breaks on job {job}, which really is inference, for {total:.0f} s in all ({mine[0]['d'][0][1].split(': ', 1)[1]})."})
-    for v in sc["viol"]:
-        if v not in hit and v not in false and not any(q["kind"] == "also" and q["rule"] == v["rule"] for q in out):
-            out.append({"kind": "also", "rule": v["rule"], "text": f"{title(v['rule'])} breaks {mmss(v['a'])} in ({v['d'][-1][1]})."})
-    return out or [{"kind": "holds", "text": "All three rules hold from start to end."}]
-
-
-def scenarios(L):
-    """Step 2: recordings laid side by side, with declarations, judged by the real rules. Each clip is 10 minutes.
-    Serving clips start when the measured load does (after the load generator's cache warm-up); training clips
-    30 s before the launch.
-    The first three scenarios each use a different serving and training recording, so they do not look alike:
-    tensor-parallel at 16 with the baseline training run, expert-parallel at 16 with middle activation
-    checkpointing, tensor-parallel at 64 with batch 1."""
-    serve = lambda rid="i1", c=16: (rid, L[rid]["mark"][f"load_{c}"])
-    train = lambda rid="p1b": (rid, L[rid]["mark"]["train_start"] - 30)
-    # truth: what the job really runs. expect: the rule the scenario is built to break, if any.
-    J = lambda i, name, typ, node, truth=None: {"id": i, "name": name, "type": typ, "truth": truth or typ, "node": node, "g": [0, 7], "start": 0, "limit": 720}
-    S = [
-        {"id": "honest", "expect": None, "name": "Honest cluster", "blurb": "Serving and pretraining, both declared.",
-         "played": "tensor-parallel serving at 16 sessions; training, batch 4", "nodes": [serve(), train()],
-         "jobs": [J(4101, "deepseek-serve", "inference", 0), J(4102, "llama3-pretrain", "pretraining", 1)]},
-        {"id": "disguised", "expect": "training_shaped", "name": "Training declared as inference", "blurb": "A job says inference and trains.",
-         "played": "expert-parallel serving at 16 sessions; training with middle activation checkpointing", "nodes": [serve("i2"), train("p2")],
-         "jobs": [J(4201, "deepseek-serve", "inference", 0), J(4202, "batch-inference", "inference", 1, "pretraining")]},
-        {"id": "undeclared", "expect": "undeclared_load", "name": "Undeclared load", "blurb": "Eight GPUs get busy with no job on them.",
-         "played": "tensor-parallel serving at 64 sessions; training, batch 1", "nodes": [serve("i1", 64), train("p3")],
-         "jobs": [J(4301, "deepseek-serve", "inference", 0)]},
-        {"id": "handoff", "expect": "boundary_traffic", "name": "One job split in two", "blurb": "Two inference jobs on two nodes are one server: prefill on one, decode on the other.",
-         "played": "the two-node prefill and decode split at 16 sessions, recorded on both nodes at once",
-         "nodes": [("i3p", L["i3p"]["mark"]["load_16"]), ("i3d", L["i3d"]["mark"]["load_16"])],
-         "jobs": [J(4401, "serve-1", "inference", 0), J(4402, "serve-2", "inference", 1)]},
-    ]
-    for sc in S:
-        sc["dur"] = 600
-        ev = evaluate([(L[r], off) for r, off in sc["nodes"]], sc["jobs"], sc["dur"])
-        sc["viol"] = spans(ev, sc["jobs"])
-        sc["result"] = outcome(sc, ev)
-        sc["nodes"] = [{"name": f"node-{'ab'[i]}", "gpus": L[r]["G"], "rec": r, "off": round(off)} for i, (r, off) in enumerate(sc["nodes"])]
-        print(f"scenario {sc['id']}: {summary(ev)}")
-        for q in sc["result"]:
-            print(f"   [{q['kind']}] {q['text']}")
-        for v in sc["viol"]:
-            print(f"   {v['rule']} from {v['a']:.0f} s to {'the end' if v['b'] > 1e8 else f'{v['b']:.0f} s'}: {v['d'][-1][1]}")
-    return S
-
-
 # Step 2's picker (his design "B", 2026-11-21): the reader picks what node-a really serves and what node-b really
 # trains, and what Slurm declares on each node (inference / pretraining / nothing). Every combination is judged here
 # by the real rules, so the page only plays results back. The scenarios are presets of this table.
@@ -406,7 +338,6 @@ def main():
                               "start_utc": rec["start_utc"], "driver": rec["driver"], "phases": [q[:2] for q in rec["phases"]],
                               "mark": {k: round(v) for k, v in rec["mark"].items() if not k.startswith("_")}}
         print(f"{rid}: {rec['n']} s, {len(text) // 1024} KB at 1 Hz, {len(fine) // 1024} KB at {FINE_HZ} Hz")
-    index["scenarios"] = scenarios(L)
     (OUT / "index.json").write_text(json.dumps(index, separators=(",", ":")))
     (OUT / "pairs.json").write_text(json.dumps(pairs(L), separators=(",", ":")))
     print("wrote", OUT)

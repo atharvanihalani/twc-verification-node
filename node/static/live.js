@@ -255,12 +255,22 @@
 
   // ---- renderer 3: raw view. Field list (one row per field, one column per GPU),
   // the merged "inbound this instant" record, and the last 30 s of samples in a dropdown.
-  const RAW_FIELDS = [  // [key, unit, rate]
-    ["power_w", "W", "10 Hz"], ["energy_mj", "mJ, cumulative", "1 Hz"], ["sm_clock_mhz", "MHz", "1 Hz"],
-    ["throttle_reasons", "bitmask", "1 Hz"], ["gpu_temp_c", "°C", "1 Hz"], ["hbm_temp_c", "°C", "1 Hz"],
-    ["mem_used_gb", "GB", "1 Hz"], ["sm_util_pct", "%", "1 Hz"], ["sm_occupancy_pct", "%", "1 Hz"],
-    ["tensor_util_pct", "%", "1 Hz"], ["dram_bw_util_pct", "%", "1 Hz"], ["pcie_tx_gb_s", "GB/s", "1 Hz"],
-    ["pcie_rx_gb_s", "GB/s", "1 Hz"], ["nvlink_tx_gb_s", "GB/s", "1 Hz"], ["nvlink_rx_gb_s", "GB/s", "1 Hz"],
+  // Every field collector.py sends, how often, and where it reads it (his ask, 2026-11-21: "a comprehensive list").
+  // Kept in step with collector.py (read_power_w, read_slow, GPM_METRICS, NetTx). The hello (once per connection)
+  // is listed in full below the table.
+  const RAW_FIELDS = [  // [key, unit, rate, read from]
+    ["power_w", "W", "10 Hz", "NVML field 186 (instant power); nvmlDeviceGetPowerUsage if the GPU lacks it"],
+    ["energy_mj", "mJ, cumulative", "1 Hz", "nvmlDeviceGetTotalEnergyConsumption"],
+    ["sm_clock_mhz", "MHz", "1 Hz", "nvmlDeviceGetClockInfo(NVML_CLOCK_SM)"],
+    ["throttle_reasons", "bitmask", "1 Hz", "nvmlDeviceGetCurrentClocksEventReasons"],
+    ["gpu_temp_c", "°C", "1 Hz", "nvmlDeviceGetTemperature(GPU)"],
+    ["hbm_temp_c", "°C", "1 Hz", "NVML field 82 (memory temperature)"],
+    ["mem_used_gb", "GB", "1 Hz", "nvmlDeviceGetMemoryInfo"],
+    ["sm_util_pct", "%", "1 Hz", "GPM SM_UTIL"], ["sm_occupancy_pct", "%", "1 Hz", "GPM SM_OCCUPANCY"],
+    ["tensor_util_pct", "%", "1 Hz", "GPM ANY_TENSOR_UTIL"], ["dram_bw_util_pct", "%", "1 Hz", "GPM DRAM_BW_UTIL"],
+    ["pcie_tx_gb_s", "GB/s", "1 Hz", "GPM PCIE_TX_PER_SEC ÷ 1000"], ["pcie_rx_gb_s", "GB/s", "1 Hz", "GPM PCIE_RX_PER_SEC ÷ 1000"],
+    ["nvlink_tx_gb_s", "GB/s", "1 Hz", "GPM NVLINK_TOTAL_TX_PER_SEC ÷ 1000"], ["nvlink_rx_gb_s", "GB/s", "1 Hz", "GPM NVLINK_TOTAL_RX_PER_SEC ÷ 1000"],
+    ["net_tx_gb_s", "GB/s, whole box", "1 Hz", "not NVML: RDMA port counters (/sys/class/infiniband/*/ports/1, port_xmit_data × 4 bytes), on GPU 0's row; collector v0.5+"],
   ];
   const rawStyle = document.createElement("style");
   rawStyle.textContent = `
@@ -272,6 +282,7 @@
     table.fields td.chg { background: var(--flash); transition: none; }
     table.fields .k { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
     table.fields .m { color: var(--muted); }
+    table.fields td.src { white-space: normal; min-width: 220px; max-width: 320px; font-size: 11.5px; line-height: 1.35; }
     .rawsec { margin-top: 22px; }
     details.stream summary, details.instantbox summary, details.ingestbox summary { cursor: pointer; color: var(--ink2); font-size: 13px; margin-bottom: 8px; }
     .ingestbody .stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
@@ -318,9 +329,9 @@
         el.dataset.sig = "__none__";
         el.innerHTML = `<p class="sub"><span class="dot" style="background:${css("--muted")}"></span>Receiving no data right now</p>
           ${noDataBar}
-          <div class="card" style="padding:4px 2px"><table class="fields"><thead><tr><th>Field</th><th>Unit</th><th>Rate</th>
+          <div class="card" style="padding:4px 2px"><table class="fields"><thead><tr><th>Field</th><th>Unit</th><th>Rate</th><th>Read from</th>
             <th class="num">GPU –</th><th class="num">Age</th></tr></thead>
-          <tbody>${RAW_FIELDS.map(([k, u, rate]) => `<tr><td class="k">${k}</td><td class="m">${u}</td><td class="m">${rate}</td>
+          <tbody>${RAW_FIELDS.map(([k, u, rate, src]) => `<tr><td class="k">${k}</td><td class="m">${u}</td><td class="m">${rate}</td><td class="m src">${src}</td>
             <td class="num m">–</td><td class="num m">–</td></tr>`).join("")}</tbody></table></div>`;
       }
       return;
@@ -338,10 +349,10 @@
       el.innerHTML = `
         <p class="sub"><span class="pickwrap"></span><span class="meta"></span></p>
         <div class="card" style="padding:4px 2px">
-          <table class="fields"><thead><tr><th>Field</th><th>Unit</th><th>Rate</th>
+          <table class="fields"><thead><tr><th>Field</th><th>Unit</th><th>Rate</th><th>Read from</th>
             ${gids.map(g => `<th class="num">GPU ${g}</th>`).join("")}<th class="num">Age</th></tr></thead>
-          <tbody>${RAW_FIELDS.map(([k, u, rate]) => `<tr data-k="${k}"><td class="k">${k}</td><td class="m">${u.replace(", cumulative", " (cum.)")}</td>
-            <td class="m">${rate}</td>${gids.map(g => `<td class="num" data-g="${g}"></td>`).join("")}
+          <tbody>${RAW_FIELDS.map(([k, u, rate, src]) => `<tr data-k="${k}"><td class="k">${k}</td><td class="m">${u.replace(", cumulative", " (cum.)")}</td>
+            <td class="m">${rate}</td><td class="m src">${src}</td>${gids.map(g => `<td class="num" data-g="${g}"></td>`).join("")}
             <td class="num m age"></td></tr>`).join("")}</tbody></table>
         </div>
         <div class="rawsec"><details class="hellobox"><summary class="hellosum"></summary><pre class="raw mono hello" style="white-space:pre-wrap"></pre></details></div>
