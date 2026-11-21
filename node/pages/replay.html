@@ -510,7 +510,7 @@ function steps() {
     : `<b><span class="pulse"></span>Listening for your box…</b><p>It appears here by itself once the collector starts.</p>
        <p><span class="mockonly" data-act="connect">mock: pretend a box connects</span></p>`;
   return `<div class="steps">
-    <div class="step"><span class="n">1</span><div><b>Rent a box with NVIDIA GPUs</b><p>Allow about an hour the first time; most of it is downloads.</p></div></div>
+    <div class="step"><span class="n">1</span><div><b>Rent an 8× H200 or 8× B200 box</b><p>The only GPUs tested so far. Allow about an hour the first time; most of it is downloads.</p></div></div>
     <div class="step"><span class="n">2</span><div><b>Run this on the box</b><pre>curl -fsSu :$P https://twc-verification-node.fly.dev/setup.py -o /tmp/setup.py &amp;&amp; python3 /tmp/setup.py</pre>
       <p><a href="/walkthrough">Full walkthrough</a> · code: ${ghA("setup.py")} · ${ghA("collector.py")}</p></div></div>
     <div class="step"><span class="n">3</span><div>${s3}</div></div></div>`;

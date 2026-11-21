@@ -22,7 +22,6 @@ Tidied 2026-11-16: open items are on top, each cut to what is still open. Finish
 
 ## Recordings
 - [ ] **Still missing from his knob list:** other GPU types (H100, B200, B300, shown as labels).
-- [ ] **4-bit redo** (his ask, 2026-11-11). First check what DeepSeek V4.1 Flash already is: its experts ship as MXFP4, so part of it is 4-bit already.
 
 ## Walkthrough and `setup.py`
 - [ ] **Run every Walkthrough command on a real 8× H200 box, `setup.py` end to end.**
@@ -38,7 +37,6 @@ Tidied 2026-11-16: open items are on top, each cut to what is still open. Finish
 - [ ] Cut time to first chart (start the model download during install; install vLLM in the background).
 - [ ] Mention the new training knobs (`TWC_CKPT_EVERY`, `TWC_REMAT=selective`): selective halves memory at batch 4 (59.7 vs 115 GiB) for about 10% longer steps; a 90 GB save takes 31–37 s.
 - [ ] Default to **one replica spanning the whole box** on every box (decided 2026-11-09); two- and eight-replica layouts become "try changing" options. Decide whether that one is tensor-parallel 8 or data+expert-parallel 8. On B300 the model fills under a quarter of the memory, so one replica across all 8 may look lightly loaded.
-- [ ] **DeepSeek V4.1 Flash on H200 and above, MiniMax M3.1 Flash on H100** (decided 2026-11-09). `setup.py` pins vLLM 0.33.0 on every box, beside any existing vLLM in `~/.twc-setup/vllm-venv`. DeepSeek has now served on 0.33.0 (H200, B200); MiniMax on H100 never has, and is the less certain one (4-bit experts, no native 4-bit math on Hopper).
 - [ ] **Say that every inference layout is a fresh server start with a multi-minute load**, even with the model downloaded. The first DeepSeek start on B200 took 38 minutes (about 6 on H200, 12–13 on the Hyperbolic H200): check whether a second start reuses Blackwell's kernel tuning.
 - [ ] **Server starts are slow** (about 8 minutes; 15 when two load together; expert-parallel "initializing model" 287 s against 27 s for tensor-parallel). Ideas: don't restart between scenarios; prebuilt kernels at setup (unmeasured); a small model for scenario runs.
   - **`use_thp`: awaiting his call; recommended to drop the test.** vLLM's source says it lengthens start-up, needs `dp_shared_memory` off (eight 94 GB tables under expert-parallel) and drops the weights from the file cache. Read from code, not measured.
@@ -48,9 +46,7 @@ Tidied 2026-11-16: open items are on top, each cut to what is still open. Finish
 - [ ] **Hugging Face login:** the read-only token menu shipped, but a real token is untested (the read/write check relies on a field of Hugging Face's "who am I" answer not yet seen with a real token), as is the browser login through `setup.py`. Still open: our own read-only OAuth app (needs his Hugging Face account).
 - [ ] A full 511 GB background download through `setup.py` to "finished" has never run (only 6 GB on a slow link, plus resume).
 - [ ] **TorchTitan:** B300's batch (8) is an estimate and B300 has never run. Decide whether the ungated tokenizer mirror (`unsloth/Meta-Llama-3.1-8B`) is OK for a public page. Use in the Overview? At 10 Hz training power is a flat plateau near the cap; a faint per-step rhythm (r ≈ 0.35) shows only with full activation checkpointing; NVLink carries a constant 51.7 GiB per step.
-- [ ] **Check compatibility with other GPUs** (tested on H100, H200 and B200 so far). A100, GB200, L40S and consumer cards may differ: GPM fields (SM / tensor / HBM use) need Hopper or newer; NVLink counters are absent on PCIe-only cards; power fields and refresh rates vary. The collector and node should degrade gracefully, not 500.
 - [ ] **See the telemetry while walking through:** a compact live strip under each workload's command, a pinned panel, or a "pop out" Replay window beside the terminal. `live.js` is already loaded on the page.
-- [ ] Setup page: a "no box? watch a recording" path.
 
 ## Rules
 Direction (his, 2026-11-10): skip finicky statistical measures; prefer clean decision boundaries.
@@ -65,9 +61,6 @@ Direction (his, 2026-11-10): skip finicky statistical measures; prefer clean dec
 
 ## Pipeline
 - [ ] systemd install mode is untested (no systemd box yet).
-- [ ] Bind declarations to GPU UUIDs instead of hostname + minor (e.g. Slurm prolog).
-- [ ] Collector: poll power at 20 Hz and send only changes (NVML refreshes ~100 ms on H200).
-- [ ] Split mode: a "no NVLink across the boundary" knob (maybe `NCCL_HOSTID` per part, untested). Skip unless it's a clean switch.
 
 ## Parked (out of scope for this demo)
 - Telemetry signing, nonces and identity on the live path: separate workstream.

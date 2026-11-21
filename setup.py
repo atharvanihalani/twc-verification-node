@@ -252,6 +252,8 @@ def detect_gpus():
     families = {family(n) for n in names}
     log(f"{len(names)} GPU(s): {', '.join(sorted(set(names)))}; driver {rows[0][1]}; "
         f"{'/'.join(sorted(families))}; CPU {platform.machine()}")
+    if not all(("H200" in n.upper() or "B200" in n.upper()) and "GB200" not in n.upper() for n in names):
+        log("NOTE: this setup has only been tested on 8x H200 and 8x B200 boxes. On these GPUs some steps may fail.")
     busy = [i for i, row in enumerate(rows) if row[2].isdigit() and int(row[2]) > 1024]
     if busy:
         log(f"WARNING: GPU(s) {', '.join(map(str, busy))} already have memory in use. Something else is running on them, "
