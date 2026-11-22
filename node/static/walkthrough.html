@@ -190,11 +190,12 @@
   const ENV = { ds: "export VLLM_USE_RUST_FRONTEND=1 VLLM_ENGINE_READY_TIMEOUT_S=7200", mm: "" };
   // How far each command has been tested. Shown under the command, so nobody mistakes a guess for a recipe.
   const TESTED = {
-    ds: { H200: "ran on H200 with vLLM 0.32.0; not rerun on 0.33.0", other: "the H200 command; not run on Blackwell" },
+    ds: { H200: "tensor-parallel ran on 8× H200 with vLLM 0.33.0 (2026-11-22)", other: "the H200 command; not run on Blackwell" },
     mm: { tp8: "from vLLM's recipe; not run by us", ep8: "our guess: vLLM's recipe has no expert-parallel layout for H100",
           tp4: "our guess: 252 GB of weights in a 320 GB pod is tight" },
   };
-  const tested = layout => `server: ${box().family === "ds" ? TESTED.ds[state.gpu] || TESTED.ds.other : TESTED.mm[layout]} · load: not run by us`;
+  // what has run end to end from this page (2026-11-22 first-run test on a vast 8× H200: tensor-parallel + AgentX)
+  const tested = layout => `server: ${box().family === "ds" ? TESTED.ds[state.gpu] || TESTED.ds.other : TESTED.mm[layout]} · load: ${state.load === "agentx" && state.gpu === "H200" && layout === "tp8" ? "AgentX at 16 sessions ran: 566 requests, 0 errors" : "not run from this page"}`;
 
   // The CUDA toolkit's folder is on the path too: vLLM builds its attention routines at first start and needs
   // the compiler there. A shell that isn't a normal login (a Slurm job, say) may not have it.
@@ -325,13 +326,13 @@ nohup ${PY} ~/.twc-setup/pd_proxy.py --host 127.0.0.1 --port 8192 \\
     { id: "ok", label: "Running as declared", what: "One inference service on all eight GPUs, declared as inference.",
       cmd: ["# Inference, declared as inference\n" + job(8, "inference", "serve", serveJob(8100)),
             "# Wait until it's ready\n" + ready(8100), AXINSTALL, "# Send it recorded coding-agent sessions\n" + agentx(8100, 16)],
-      expect: "Every rule holds.", mock: "not run yet" },
+      expect: "Every rule holds.", mock: state.gpu === "H200" ? "ran on an 8× H200 under Slurm, 2026-11-22: every rule held" : "the H200 run only" },
     { id: "a", label: "Evading A: off the books", what: "Train on all eight GPUs with no job declared.",
       cmd: [`# Training, started outside Slurm\ncd ${TT} && source .venv/bin/activate\n${trainEnv(8)}\n  nohup ./run_train.sh --output-dir ~/tt-run > ~/train.log 2>&1 &`],
-      expect: "Caught: rule “Undeclared workloads” breaks on all eight GPUs.", mock: "not run yet" },
+      expect: "Caught: rule “Undeclared workloads” breaks on all eight GPUs.", mock: state.gpu === "H200" ? "ran on an 8× H200, 2026-11-22: caught" : "the H200 run only" },
     { id: "b", label: "Evading B: mislabelled", what: "Declare one inference job on all eight GPUs, then train on them.",
       cmd: ["# Training, declared as inference\n" + job(8, "inference", "serve", trainJob(8))],
-      expect: "Caught: rule “Hidden training” breaks.", mock: "not run yet" },
+      expect: "Caught: rule “Hidden training” breaks.", mock: state.gpu === "H200" ? "ran on an 8× H200 under Slurm, 2026-11-22: caught (tensor cores 75% busy)" : "the H200 run only" },
     { id: "c", label: "Evading C: one service on two boxes",
       what: "Needs a second box on the same private network (a two-node rental), set up with section 1 and connected to Slurm with the command above. On paper, two separate inference jobs, one per box. In reality one inference service: the first box reads the prompts and hands its work to the second over the network, which writes the answers.",
       cmd: ["# On both boxes: each box's private address (hostname -I shows it)\nexport PREFILL_IP=10.0.0.1 DECODE_IP=10.0.0.2",

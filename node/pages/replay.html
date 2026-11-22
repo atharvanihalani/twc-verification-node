@@ -652,8 +652,9 @@ function withExt(base, pkey) {
       const decl = J.jobs.filter(j => j.declared), mineV = J.violations;
       decl.forEach(j => W.jobs.push({ id: j.id, name: j.name, type: j.declared, node: ni, g: [Math.min(...j.gpus), Math.max(...j.gpus)], start: j.start - T0, limit: (j.end ?? T0 + 1e7) - T0 }));
       mineV.forEach(v => W.viol.push({ rule: v.rule, a: v.start - T0, b: v.end == null ? 1e9 : v.end - T0, gpus: v.gpus.map(g => `${ni}:${g}`), jobs: v.jobs, d: [[v.start - T0, v.detail]] }));
+      const running = decl.filter(j => j.end == null);
       const says = !J.slurm ? "No scheduler is connected, so nothing on it is declared (Walkthrough, section 3 connects one)."
-        : decl.length ? `Slurm declares ${[...new Set(decl.map(j => j.declared))].join(" and ")} on it (job ${decl.map(j => j.id).join(", ")}).` : "No declared Slurm job covers it, so its GPUs count as undeclared.";
+        : running.length ? `Slurm declares ${[...new Set(running.map(j => j.declared))].join(" and ")} on it (job ${running.map(j => j.id).join(", ")}).` : "No running Slurm job covers it, so its GPUs count as undeclared.";
       const open = mineV.filter(v => v.end == null), past = mineV.filter(v => v.end != null);
       W.extNotes.push({ name, should: `${name} is ${esc(e.host)}, live. ${says} The rules can't know what it really runs; you do. If its telemetry doesn't fit, a rule should break.`,
         did: open.length ? open.map(v => `<span class="k-missed">Broken now:</span> ${quote(v.rule)} on ${name}.`).join(" ") + (past.length ? ` It broke and held again ${past.length} time${past.length > 1 ? "s" : ""} before.` : "")
@@ -806,7 +807,7 @@ function declTable() {
       seg(`xm${k}`, e.mode === "live" ? "● Live" : rec ? rec.name : "Recorded", [["live", "Live", e.mode === "live", box ? "" : "this box isn't connected right now", box ? "what it's doing now" : ""],
         ...recs.map(m => [`r:${m.id}`, m.name, e.mode === "rec" && m.id === e.rid, "", `${mmss(m.n)} · ${new Date(m.started * 1000).toTimeString().slice(0, 5)}`])]) +
       (e.mode === "rec" ? scrubChip(`ext:${k}`, e.shift || 0, rec ? [e.shift || 0, rec.n, rec.n] : null, BOXC[ni]) : "") + `</span>`;
-    const J = LIVEJ[e.host], dj = J && J.jobs.filter(j => j.declared);
+    const J = LIVEJ[e.host], dj = J && J.jobs.filter(j => j.declared && j.end == null);   // running jobs only (found 2026-11-22: a cancelled job still showed)
     const says = e.mode === "rec" ? `<div class="pills dp">` + ["i", "p", "n"].map(d => `<button data-xdecl="${k}:${d}" class="${e.decl === d ? "on " + d : ""}">${{ i: "inference", p: "pretraining", n: "nothing" }[d]}</button>`).join("") + `</div>`
       : `<span class="fromslurm">${!J ? "asking the node…" : !J.slurm ? "no scheduler connected" : dj.length ? dj.map(j => `<span class="dtag ${j.declared[0]}">${j.declared}</span> job ${esc(j.id)}`).join(" · ") : "no declared job on it"}<small>from Slurm, live</small></span>`;
     return `<tr><td class="nn">${sw(BOXC[ni])}node-${LETTERS[ni]}<button class="xrm" data-xrm="${k}" title="remove">×</button></td><td>${what}</td><td>${says}</td></tr>`; }).join("");
