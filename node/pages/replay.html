@@ -466,7 +466,7 @@ function liveIdle(n) {
   return any;
 }
 function phaseOf(n, t) {
-  if (n.live) return liveIdle(n) ? "live · idle (AgentX's load arrives about 5 min after it starts)" : "live";
+  if (n.live) return liveIdle(n) ? "live · idle (if you just started AgentX, its load arrives about 5 min in)" : "live";
   const r = IDX.recs[n.rec]; if (!r) return "";
   if (notRec(n, t)) return "not recorded";
   if (n.loop) t = t < 0 ? 0 : t % n.loop;
