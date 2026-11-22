@@ -251,6 +251,13 @@ PartitionName=train Nodes=$H Default=YES MaxTime=INFINITE State=UP
 PartitionName=serve Nodes=$H MaxTime=INFINITE State=UP
 CONF
 if [ "$NGPU" -gt 0 ]; then echo "NodeName=$H Name=gpu Type=$GTYPE File=/dev/nvidia[0-$((NGPU-1))]" > /etc/slurm/gres.conf; else rm -f /etc/slurm/gres.conf; fi
+# Slurm 23.11+ (Ubuntu 24.04) won't start a node or a job without a cgroup plugin, and a container's /sys/fs/cgroup is
+# read-only. The v1 plugin is content with a folder that looks like a v1 hierarchy; with proctrack/linuxproc and
+# task/none it never uses it for anything (found on a vast 8x H200, 2026-11-21). Older Slurm ignores this file.
+V=/var/spool/slurmd/cgv1
+for c in freezer cpuset memory devices cpuacct cpu; do mkdir -p $V/$c; : > $V/$c/tasks; : > $V/$c/cgroup.procs; done
+echo 0-$((CPUS-1)) > $V/cpuset/cpuset.cpus; echo 0 > $V/cpuset/cpuset.mems
+printf "CgroupPlugin=cgroup/v1\nCgroupMountpoint=$V\n" > /etc/slurm/cgroup.conf
 pkill -x slurmctld || true; pkill -x slurmd || true; sleep 1
 slurmctld; slurmd
 for i in $(seq 1 20); do sinfo -h -o %T 2>/dev/null | grep -q idle && break; sleep 1; done
@@ -283,7 +290,10 @@ def offer_slurm(yes):
     r = subprocess.run(["bash", "-c", SLURM_SETUP], env={**os.environ, "NGPU": str(n), "GTYPE": gtype},
                        capture_output=True, text=True)
     if r.returncode != 0 or not shutil.which("scontrol"):
-        sys.exit(f"[reporter] Slurm setup failed:\n{(r.stderr or r.stdout)[-1500:]}")
+        # apt's warnings fill stderr; the reason is usually in the daemons' own logs
+        logs = "".join(f"\n--- last lines of {f} ---\n" + "\n".join(Path(f).read_text(errors="replace").splitlines()[-8:])
+                       for f in ("/var/log/slurm/slurmd.log", "/var/log/slurm/slurmctld.log") if Path(f).exists())
+        sys.exit(f"[reporter] Slurm setup failed (exit {r.returncode}):\n{(r.stderr or r.stdout)[-600:]}{logs}")
     log("Slurm is up:\n" + r.stdout.strip())
     log("note: no cgroups here, so a job's GPU allocation isn't enforced (nvidia-smi in a job sees every GPU). "
         "Slurm won't restart by itself if this machine restarts: rerun install.")
@@ -295,7 +305,12 @@ def install(a):
     try:
         n = len(read_jobs()[0])
     except Exception as e:
-        sys.exit(f"[reporter] scontrol can't read the job table here: {e}")
+        if not (a.install_slurm and Path("/etc/slurm/slurm.conf").exists() and "ClusterName=twc" in Path("/etc/slurm/slurm.conf").read_text()):
+            sys.exit(f"[reporter] scontrol can't read the job table here: {e}")
+        # our own one-box Slurm, installed but not running (a box restart, or an earlier failed setup): set it up again
+        log(f"the one-box Slurm isn't answering ({e}); setting it up again")
+        offer_slurm(True)
+        n = len(read_jobs()[0])
     HOME.mkdir(parents=True, exist_ok=True)
     password = os.environ.get("TWC_PASSWORD", "")
     CONFIG.write_text(json.dumps({"node": a.node, "password": password}, indent=2))

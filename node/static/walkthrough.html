@@ -77,7 +77,7 @@
     <div class="cmd card"><pre class="mono" id="install"></pre><button data-copy="install">Copy</button></div>
     <div class="status" id="boxstatus"><span class="dot"></span><span id="boxtext">Waiting for a box to start streaming…</span></div>
     <div id="busy" class="busy" style="display:none"><b>Something is already using your GPUs</b> (<span id="busymem"></span>), and the workloads below won't fit beside it.
-      Setup warns about this too. On vast's vLLM image it's the image's own server; stop it with:
+      If you've already started one of the workloads below, that's what this is: ignore it. Otherwise, on vast's vLLM image it's the image's own server; stop it with:
       <div class="cmd card"><pre class="mono" id="freecmd">supervisorctl stop vllm; pkill -9 -f "[V]LLM::"</pre><button data-copy="freecmd">Copy</button></div></div>
     <div class="label" style="margin-top:8px">Pick your GPUs</div>
     <div class="pills" id="gpu"></div>
@@ -397,8 +397,10 @@ nohup ${PY} ~/.twc-setup/pd_proxy.py --host 127.0.0.1 --port 8192 \\
   });
 
   // our own workloads also fill the GPUs: once the reader has copied a workload or scenario command, stop warning
-  let ours = false;
-  document.querySelectorAll('[data-copy="wl-cmd"], [data-copy="sc-cmd"], [data-copy="x-cmd"]').forEach(b => b.addEventListener("click", () => { ours = true; }));
+  // remembered across reloads for an hour: our own server holds the GPUs too, and looks the same from here
+  let ours = false; try { ours = Date.now() - (+localStorage.getItem("twc-wt-copied") || 0) < 3600e3; } catch (e) { }
+  document.querySelectorAll('[data-copy="wl-cmd"], [data-copy="sc-cmd"], [data-copy="x-cmd"]').forEach(b => b.addEventListener("click", () => {
+    ours = true; try { localStorage.setItem("twc-wt-copied", String(Date.now())); } catch (e) { } }));
   // The box status line comes from the same 1 s poll as the Debug tab.
   TWCLive.subscribe(d => {
     const hosts = Object.keys(d);

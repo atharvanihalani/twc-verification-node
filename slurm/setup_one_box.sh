@@ -39,6 +39,12 @@ PartitionName=train Nodes=$H Default=YES MaxTime=INFINITE State=UP
 PartitionName=serve Nodes=$H MaxTime=INFINITE State=UP
 CONF
 echo "NodeName=$H Name=gpu Type=h100 File=/dev/nvidia[0-7]" > /etc/slurm/gres.conf
+# Slurm 23.11+ (Ubuntu 24.04) needs a cgroup plugin, and a container's /sys/fs/cgroup is read-only: give the v1
+# plugin a stand-in folder it never really uses (proctrack/linuxproc, task/none). Same as slurm_reporter.py.
+V=/var/spool/slurmd/cgv1
+for c in freezer cpuset memory devices cpuacct cpu; do mkdir -p $V/$c; : > $V/$c/tasks; : > $V/$c/cgroup.procs; done
+echo 0-$(( $(nproc) - 1 )) > $V/cpuset/cpuset.cpus; echo 0 > $V/cpuset/cpuset.mems
+printf "CgroupPlugin=cgroup/v1\nCgroupMountpoint=$V\n" > /etc/slurm/cgroup.conf
 pkill -x slurmctld || true; pkill -x slurmd || true; sleep 1
 slurmctld; slurmd
 sleep 3
