@@ -225,6 +225,7 @@
   details.sacct summary::after { content: " ▾"; font-size: 10px; } details.sacct[open] summary::after { content: " ▴"; }
   details.sacct .sub { color: var(--muted); font-size: 12px; }
   details.sacct pre { font: 11.5px/1.55 ui-monospace, Menlo, monospace; background: var(--page); border: 1px solid var(--ring); padding: 8px 10px; margin: 8px 0 0; overflow-x: auto; }
+  details.sacct pre.real { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow-y: auto; }   /* scontrol -o: one long line a job */
 
   /* rules */
   .rule { display: grid; grid-template-columns: 14px 180px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--grid); }
@@ -440,7 +441,10 @@ const gpuName = W => (W.nodes[0] && (W.nodes[0].gpu || (IDX.recs[W.nodes[0].rec]
 // The Telemetry pane's label beside each node: what it is and what it was really running (his ask, 2026-11-17: friends
 // couldn't tell which node trains). Every recording is one or the other; recording ids start p (pretraining) or i (inference).
 // A connected box shows the name the reader gave it (or "live"); a recording made on this page, its saved name.
-const nodeLabel = (W, n) => `${n.gpus} × ${esc(n.gpu || gpuName(W))}` + (n.label ? ` (${esc(n.label)})` : n.live ? " (live)"
+// A live box reads "your box · <hostname>" everywhere it shows (found on the first run, 2026-11-22: on vast the hostname
+// is a container id like 50b1fb18cd83, which a newcomer doesn't recognise as theirs).
+const yourBox = h => `your box · ${esc(h)}`;
+const nodeLabel = (W, n) => `${n.gpus} × ${esc(n.gpu || gpuName(W))}` + (n.live ? ` (${yourBox(n.live)}${n.label ? `, ${esc(n.label)}` : ""})` : n.label ? ` (${esc(n.label)})`
   : n.rec && !n.rec.startsWith("x:") ? (n.rec[0] === "p" ? " (pretraining)" : " (inference)") : "");
 // the power axis of the lanes: Blackwell cards reach 1 kW, Hopper cards 700 W
 const laneScale = W => /B[23]00/.test(gpuName(W)) ? { max: 1300, grid: 1000, label: "1 kW", busy: 300 } : { max: 800, grid: 500, label: "500 W", busy: 200 };
@@ -450,8 +454,19 @@ const laneScale = W => /B[23]00/.test(gpuName(W)) ? { max: 1300, grid: 1000, lab
 const BOXC = ["#2a78d6", "#eb6834", "#1baf7a", "#7f5af0", "#d6a419", "#d6467e", "#2fb5c9", "#8a6d4a"];   // live.js's box colours
 // is node n outside its recording at clip time t (slid past either end)?
 function notRec(n, t) { const r = !n.live && IDX.recs[n.rec]; if (!r) return false; if (n.loop) t = t < 0 ? 0 : t % n.loop; const x = t + n.off; return x < 0 || x >= r.n; }
+// A live box under the busy floor on every GPU for the last minute gets a hint in the phase line (found on the first
+// run, 2026-11-22: AgentX builds its dataset for ~2 min, then starts up, so its load reaches the GPUs ~5 min in).
+function liveIdle(n) {
+  const H = LIVEHIST[n.live], P = H && H.s.power, busy = /B[23]00/.test(n.gpu || "") ? 300 : 200;
+  if (!P || !H.last) return false;
+  let any = false;
+  for (const A of P) { if (!A || !A.length) continue; any = true;
+    if (A[0][0] > H.last - 60) return false;   // under a minute of readings yet
+    for (let i = A.length - 1; i >= 0 && A[i][0] >= H.last - 60; i--) if (A[i][1] >= busy) return false; }
+  return any;
+}
 function phaseOf(n, t) {
-  if (n.live) return "live";
+  if (n.live) return liveIdle(n) ? "live · idle (AgentX's load arrives about 5 min after it starts)" : "live";
   const r = IDX.recs[n.rec]; if (!r) return "";
   if (notRec(n, t)) return "not recorded";
   if (n.loop) t = t < 0 ? 0 : t % n.loop;
@@ -558,7 +573,7 @@ async function pollLive() {
         if (q.t > H.last) H.last = q.t; }
     } catch (e) { /* try again next second */ } }
   if (st.mode === "check") for (const host of liveHosts()) {   // step 2: its Slurm jobs and live rule results
-    try { const r = await fetch(`/api/boxes/judged?host=${encodeURIComponent(host)}`); if (!r.ok) continue; const J = await r.json();
+    try { const r = await fetch(`/api/boxes/judged?host=${encodeURIComponent(host)}`); if (!r.ok) continue; const J = await r.json(); J._at = Date.now();
       // redraw the table only when what it says changes: the jobs, or a rule breaking or holding again
       const sig = JSON.stringify([J.slurm, J.jobs.map(j => [j.id, j.declared, j.end]), J.violations.map(v => [v.rule, v.start, v.end == null])]);
       const changed = !LIVEJ[host] || LIVEJ[host]._sig !== sig; J._sig = sig; LIVEJ[host] = J; LIVEJ.ver = (LIVEJ.ver || 0) + 1;
@@ -647,8 +662,8 @@ function withExt(base, pkey) {
     const ni = W.nodes.length, name = `node-${LETTERS[ni]}`;
     if (e.mode === "live") {
       const b = BOXES.boxes.find(x => x.host === e.host) || { gpus: 8, gpu: "GPU" }, J = LIVEJ[e.host];
-      W.nodes.push({ name, live: e.host, gpus: b.gpus, gpu: b.gpu, off: 0, label: e.host });
-      if (!J) { W.extNotes.push({ name, should: `${name} is ${esc(e.host)}, live. Waiting for its Slurm jobs and verdicts…`, did: "" }); return; }
+      W.nodes.push({ name, live: e.host, gpus: b.gpus, gpu: b.gpu, off: 0, label: "" });
+      if (!J) { W.extNotes.push({ name, should: `${name} is ${yourBox(e.host)}, live. Waiting for its Slurm jobs and verdicts…`, did: "" }); return; }
       const decl = J.jobs.filter(j => j.declared), mineV = J.violations;
       decl.forEach(j => W.jobs.push({ id: j.id, name: j.name, type: j.declared, node: ni, g: [Math.min(...j.gpus), Math.max(...j.gpus)], start: j.start - T0, limit: (j.end ?? T0 + 1e7) - T0 }));
       mineV.forEach(v => W.viol.push({ rule: v.rule, a: v.start - T0, b: v.end == null ? 1e9 : v.end - T0, gpus: v.gpus.map(g => `${ni}:${g}`), jobs: v.jobs, d: [[v.start - T0, v.detail]] }));
@@ -656,7 +671,7 @@ function withExt(base, pkey) {
       const says = !J.slurm ? "No scheduler is connected, so nothing on it is declared (Walkthrough, section 3 connects one)."
         : running.length ? `Slurm declares ${[...new Set(running.map(j => j.declared))].join(" and ")} on it (job ${running.map(j => j.id).join(", ")}).` : "No running Slurm job covers it, so its GPUs count as undeclared.";
       const open = mineV.filter(v => v.end == null), past = mineV.filter(v => v.end != null);
-      W.extNotes.push({ name, should: `${name} is ${esc(e.host)}, live. ${says} The rules can't know what it really runs; you do. If its telemetry doesn't fit, a rule should break.`,
+      W.extNotes.push({ name, should: `${name} is ${yourBox(e.host)}, live. ${says} The rules can't know what it really runs; you do. If its telemetry doesn't fit, a rule should break.`,
         did: open.length ? open.map(v => `<span class="k-missed">Broken now:</span> ${quote(v.rule)} on ${name}.`).join(" ") + (past.length ? ` It broke and held again ${past.length} time${past.length > 1 ? "s" : ""} before.` : "")
           : `<span class="k-holds">Holding:</span> no rule is broken on ${name}${past.length ? ` (it broke ${past.length} time${past.length > 1 ? "s" : ""} earlier)` : ""}.` });
       return; }
@@ -739,7 +754,7 @@ function sideRows() {
     if (s.k === "ext") {
       const box = BOXES.boxes.find(b => b.host === s.host), recs = BOXES.recordings.filter(m => m.host === s.host), rec = recs.find(m => m.id === s.rid);
       const hosts = [...new Set([...BOXES.boxes.map(b => b.host), ...BOXES.recordings.map(m => m.host)])];
-      const boxSeg = `<span class="sep">›</span><span class="sseg${isOpen(0) ? " open" : ""}"><button data-sseg="${i}:0">${esc(s.host)}${box ? ` · ${box.gpus} × ${esc(box.gpu)}` : ""}</button>${isOpen(0) ? `<div class="pop"><div class="g">Boxes</div>` +
+      const boxSeg = `<span class="sep">›</span><span class="sseg${isOpen(0) ? " open" : ""}"><button data-sseg="${i}:0">${box ? `${yourBox(s.host)} · ${box.gpus} × ${esc(box.gpu)}` : esc(s.host)}</button>${isOpen(0) ? `<div class="pop"><div class="g">Boxes</div>` +
         hosts.map(h => { const b = BOXES.boxes.find(x => x.host === h), n = BOXES.recordings.filter(m => m.host === h).length;
           return `<button data-xhost="${i}:${esc(h)}" class="${h === s.host ? "on" : ""}">${esc(h)}<small>${b ? "connected" : ""}${b && n ? " · " : ""}${n ? `${n} recorded` : ""}</small></button>`; }).join("") + `</div>` : ""}</span>`;
       const modeSeg = `<span class="sep">›</span><span class="sseg${isOpen(1) ? " open" : ""}"><button data-sseg="${i}:1">${s.mode === "live" ? `<span class="xdot"></span>Live` : "Recorded"}</button>${isOpen(1) ? `<div class="pop">` +
@@ -803,7 +818,7 @@ function declTable() {
   const hosts = [...new Set([...BOXES.boxes.map(b => b.host), ...BOXES.recordings.map(m => m.host)])];
   const extRows = P.ext.map((e, k) => { const ni = 2 + k, box = BOXES.boxes.find(b => b.host === e.host), recs = BOXES.recordings.filter(m => m.host === e.host), rec = recs.find(m => m.id === e.rid);
     const what = `<span class="chain"><b class="kk">External box</b><span class="sep">›</span>` +
-      seg(`xh${k}`, e.host, hosts.map(h => [h, h, h === e.host, "", BOXES.boxes.some(b => b.host === h) ? "connected" : "recordings only"])) + `<span class="sep">›</span>` +
+      seg(`xh${k}`, box ? `your box · ${e.host}` : e.host, hosts.map(h => [h, h, h === e.host, "", BOXES.boxes.some(b => b.host === h) ? "connected" : "recordings only"])) + `<span class="sep">›</span>` +
       seg(`xm${k}`, e.mode === "live" ? "● Live" : rec ? rec.name : "Recorded", [["live", "Live", e.mode === "live", box ? "" : "this box isn't connected right now", box ? "what it's doing now" : ""],
         ...recs.map(m => [`r:${m.id}`, m.name, e.mode === "rec" && m.id === e.rid, "", `${mmss(m.n)} · ${new Date(m.started * 1000).toTimeString().slice(0, 5)}`])]) +
       (e.mode === "rec" ? scrubChip(`ext:${k}`, e.shift || 0, rec ? [e.shift || 0, rec.n, rec.n] : null, BOXC[ni]) : "") + `</span>`;
@@ -834,7 +849,7 @@ const telePane = () => pane("Telemetry", `<div id="tele"></div>`, zoomSeg() + `<
 function steps() {
   const bs = BOXES.boxes;
   const s3 = bs.length
-    ? `<b><span class="livedot"></span>${esc(bs.map(b => b.host).join(", "))} ${bs.length > 1 ? "are" : "is"} streaming</b><p>Watch it live beside the recordings, or record a stretch of it.</p>
+    ? `<b><span class="livedot"></span>${bs.length > 1 ? "Your boxes" : "Your box"} · ${esc(bs.map(b => b.host).join(", "))} ${bs.length > 1 ? "are" : "is"} streaming</b><p>Watch it live beside the recordings, or record a stretch of it.</p>
        <p><button class="btn primary" data-act="addlive">Show it side by side</button></p>`
     : `<b><span class="pulse"></span>Listening for your box…</b><p>It appears here by itself once the collector starts.</p>`;
   return `<div class="steps">
@@ -1218,6 +1233,8 @@ function paintRules(el, W, now) {
 // "Slurm table as reported" (his ask, 2026-11-11), as a mock-up for the recordings: no scheduler ran while they were
 // made, so this is the table the declarations above would come from, in squeue's layout. The reporter sends it every
 // 5 s, so it changes on that beat; a job's real activity (its `truth`) is never shown.
+// With a live box in the table it shows instead the real text that box's reporter sent (`scontrol show job -d -o`),
+// kept by the node (found on the first run, 2026-11-22: the mock-up label was wrong once a real Slurm was connected).
 function slurmTable(W, t) {
   const gpu = gpuName(W).toLowerCase(), head = ["JOBID", "NAME", "STATE", "TIME", "TIME_LIMIT", "NODELIST", "GRES", "COMMENT"];
   const rows = W.jobs.filter(j => j.start <= t).map(j => [String(j.id), j.name, t < j.limit ? "RUNNING" : "COMPLETED", mmss(Math.min(t, j.limit) - j.start).replace(/^0/, ""),
@@ -1228,6 +1245,17 @@ function slurmTable(W, t) {
 }
 function paintSacct(W, t) {
   if (!$("#sacct")) return;
+  const lh = st.mode === "check" ? liveHosts() : [], pre = $("#sacctpre");
+  pre.classList.toggle("real", lh.length > 0);
+  if (lh.length) {
+    const Js = lh.map(h => LIVEJ[h]).filter(Boolean), cs = new Map();
+    Js.forEach(J => (J.scheduler || []).forEach(c => cs.has(c.cluster) || cs.set(c.cluster, { ...c, now: J.now + (Date.now() - J._at) / 1000 })));
+    const L = [...cs.values()], c0 = L[0];
+    setT($("#sacctsub"), !Js.length ? "· asking the node…" : !c0 ? "· no scheduler is connected to your box"
+      : `· real: scontrol show job -d -o, cluster ${L.map(c => c.cluster).join(", ")} · received ${new Date(c0.received_at * 1000).toTimeString().slice(0, 8)}, ${Math.max(0, Math.round(c0.now - c0.received_at))} s ago`);
+    setT(pre, !Js.length ? "" : !c0 ? "(nothing reported: section 3 of the Walkthrough connects one)"
+      : L.map(c => (L.length > 1 ? `# cluster ${c.cluster}\n` : "") + (c.error ? `scontrol failed: ${c.error}` : (c.raw || "").trim() || "(no jobs)")).join("\n\n"));
+    return; }
   const got = Math.floor(t / 5) * 5;
   setT($("#sacctsub"), `· mock-up: no scheduler ran while these were recorded · received at ${mmss(got)}, ${Math.round(t - got)} s ago`);
   setT($("#sacctpre"), slurmTable(W, got));

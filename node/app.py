@@ -946,11 +946,13 @@ def api_slurm():
 # does for the built-in recordings, and cached next to it.
 @app.get("/api/boxes/judged")
 def api_box_judged(host: str):
-    look, jobs = gpu_lookup(), []
-    for c in SLURM.values():
+    look, jobs, mine_c = gpu_lookup(), [], []
+    for name, c in SLURM.items():
         for j in c["jobs"].values():
             gs = sorted({int(m["gpu"]) for a in j.get("gpus") or [] for i in a.get("idx") or []
                          if (m := look.get((a.get("node"), i))) and m["host"] == host and m.get("gpu") is not None})
+            if gs and name not in mine_c:
+                mine_c.append(name)
             if gs and j.get("start") is not None and not j.get("start_is_estimate"):
                 done = j.get("gone_at") or j.get("state") not in ("PENDING", "RUNNING", "COMPLETING", "SUSPENDED", "CONFIGURING")
                 jobs.append({"id": str(j["id"]), "name": j.get("name") or "", "declared": j.get("declared"), "gpus": gs,
@@ -962,7 +964,12 @@ def api_box_judged(host: str):
         if gs or mine:
             viol.append({"rule": v["rule"], "start": v["start"], "end": None if v in LIVE_RULES["open"].values() else v["end"],
                          "gpus": gs, "jobs": [str(x) for x in mine], "detail": v.get("last_detail", "")})
-    return {"now": time.time(), "slurm": bool(SLURM), "jobs": jobs, "violations": viol}
+    # The scheduler's own text for the page's "Slurm table as reported": the cluster(s) with a job on this box, else
+    # the only cluster reporting (one-box Slurm before its first job). Several unrelated clusters and none on it: none.
+    names = mine_c or (list(SLURM) if len(SLURM) == 1 else [])
+    sched = [{"cluster": n, "raw": SLURM[n].get("raw", ""), "error": SLURM[n].get("error"),
+              "received_at": SLURM[n].get("received_at")} for n in names]
+    return {"now": time.time(), "slurm": bool(SLURM), "jobs": jobs, "violations": viol, "scheduler": sched}
 
 
 def rec_judge(rid, decl):

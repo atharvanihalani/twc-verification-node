@@ -238,12 +238,15 @@ UV=$(command -v uv || echo ~/.twc-setup/bin/uv)
   --benchmark-duration 900 --benchmark-grace-period 30 --random-seed ${seed} \\
   --output-artifact-dir ~/${out} > ~/${out}.log 2>&1 &
 # It runs in the background for about 25 minutes: start-up, cache warm-up, then 15 measured.
+# The GPUs stay idle for its first ~5 minutes while it builds its dataset; that's expected.
 # Watch it on the Replay demo. Its own progress: tail -f ~/${out}.log (Ctrl-C stops the tail, not AgentX)`;
   const AX_TRY = ["--concurrency: sessions at once (the recordings used 4, 16 and 64)",
                   "Expect about 10 minutes of start-up and cache warm-up before the measured 15 minutes; progress is in ~/agentx.log"];
   const sendLoad = (port, conc, rate) => state.load === "agentx" ? [AXINSTALL, "# Send it recorded coding-agent sessions\n" + agentx(port, conc)]
                                                                  : [TRACE, "# Send it bursty load\n" + bench(port, rate)];
   const loadTry = () => state.load === "agentx" ? AX_TRY : LOAD_TRY;
+  // found on the first run, 2026-11-22: the live view looks idle for ~5 min after AgentX starts
+  const loadSee = () => state.load === "agentx" ? ["With AgentX, the GPUs stay idle for about 5 minutes first"] : [];
 
   const TT = "~/.twc-setup/torchtitan";
   // Built per render, because the model and its flags depend on the box picked in section 1.
@@ -252,19 +255,19 @@ UV=$(command -v uv || echo ~/.twc-setup/bin/uv)
     return [
       { id: "tp8", label: "Tensor-parallel", what: `One copy of ${b.name}. Every layer is split across all 8 GPUs (TP8).`,
         cmd: [setup(), first + serve("tp8", 8100), "# Wait until it's ready: the download if needed, then loading into the GPUs\n" + ready(8100), ...sendLoad(8100, 16, 2)],
-        see: ["All 8 GPUs move together", "Power rises and falls with the load"],
+        see: ["All 8 GPUs move together", "Power rises and falls with the load", ...loadSee()],
         tryit: loadTry(),
         mock: tested("tp8") },
       { id: "ep8", label: "Expert-parallel", what: `One copy of ${b.name}. Attention runs on every GPU; the experts are spread across all 8 (DP8 + EP).`,
         cmd: [setup(), first + serve("ep8", 8100), "# Wait until it's ready: the download if needed, then loading into the GPUs\n" + ready(8100), ...sendLoad(8100, 16, 2)],
-        see: ["Lower, flatter power than Tensor-parallel"],
+        see: ["Lower, flatter power than Tensor-parallel", ...loadSee()],
         tryit: ["Compare power per GPU with Tensor-parallel at the same load", ...loadTry()],
         mock: tested("ep8") },
       { id: "pods", label: "Two pods", what: `Two independent copies of ${b.name}, 4 GPUs each (TP4 × 2).`,
         cmd: [setup(), first + "# Start one server per half\n" + serve("tp4", 8101, "0,1,2,3"), serve("tp4", 8102, "4,5,6,7"), "# Wait until both are ready: the download if needed, then loading into the GPUs\n" + ready(8101) + "\n" + ready(8102),
               ...(state.load === "agentx" ? [AXINSTALL, "# Send each one recorded coding-agent sessions, 8 at a time\n" + agentx(8101, 8, 42, "agentx-1"), agentx(8102, 8, 43, "agentx-2")]
                                           : [TRACE, "# Send each one bursty load\n" + bench(8101, 1) + " &", bench(8102, 1) + " &"])],
-        see: ["Each half moves together", "The two halves don't"],
+        see: ["Each half moves together", "The two halves don't", ...loadSee()],
         tryit: ["Send one pod far more load", ...loadTry()],
         mock: tested("tp4") },
     ];
