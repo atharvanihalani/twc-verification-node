@@ -90,9 +90,11 @@
   .srm:hover { color: var(--ink); }
   .sadd { font: inherit; font-size: 13px; border: 0; background: none; color: var(--ink2); cursor: pointer; padding: 2px 0 0 11px; justify-self: start; }
   .sadd:hover { color: var(--ink); }
-  /* the step-2 spotlight: everything but the check dims and stops taking clicks until the check is clicked once */
-  #app .cols > div > *, #app .side { transition: opacity .6s ease, filter .6s ease; }
-  #app.spotlight .cols > div > *:not([data-spot]), #app.spotlight .side { opacity: .28; filter: saturate(.4); pointer-events: none; }
+  /* the spotlight: the first time each step opens, everything but its main panes dims for 5 s, then fades back.
+     A click on the lit panes lifts it at once and still does what it would; the dimmed parts ignore the pointer. */
+  #app .cols > div > *, #app .side, #app .sel > .pills.big { transition: opacity 1.2s ease, filter 1.2s ease; }
+  #app.spotlight .cols > div > *:not([data-spot]), #app.spotlight .side, #app.spotlight .sel[data-spot] > .pills.big { opacity: .28; filter: saturate(.4); pointer-events: none; }
+  #app.spotlight .cols > div > *:not([data-spot]), #app.spotlight .side { transition-duration: .6s; }
   #app.spotlight [data-spot] { cursor: pointer; }
   /* step 2: truth vs declaration (2026-11-21) */
   .dtab { border-collapse: collapse; width: 100%; margin: 2px 0 6px; }
@@ -541,7 +543,7 @@ const TYPE = { inference: "#2a78d6", pretraining: "#3f8f5b" }, RED = "#d03b3b", 
 const st = { mode: "raw" /* raw = step 1 | check = step 2 */, raw: 0, pick: { pre: [0, 0], inf: [0, 0, 1] },
              side: [{ k: "inf", pick: [0, 0, 1] }, { k: "pre", pick: [0, 0] }], ruleOpen: new Set(), noteOpen: false, sacctOpen: false, seg: null /* open menu in Side by side: "row:level" */, zoom: false, howOpen: false, sc: 1, now: 0, paused: false, speed: 12, hold: 0,
              strips: new Set(["power", "hbm_bw", "nvlink"]), menuOpen: false, addOpen: false,
-             addMenu: false, spot: false, spotSeen: false, liveT0: null /* box clock when live watching started */, toast: "",
+             addMenu: false, spot: false, spotT: 0, spotSeen: {}, liveT0: null /* box clock when live watching started */, toast: "",
              pair: { serve: "i1c16", train: "p1b", da: "i", db: "p", lastServe: "i1c16", ext: [] /* {host, mode, rid, decl, shift} */ }, gridOpen: false };
 
 // ---------------------------------------------------------------- connected boxes (External box rows)
@@ -837,15 +839,15 @@ function declTable() {
 }
 // While a node is live the bar can't pause, scrub or speed up (his note, 2026-11-21): time runs at the box's own pace,
 // recorded rows loop beside it, and "Restart recordings" starts them all again from the top of their clips.
-const transport = () => world().live ? `<div class="transport livebar"><span class="livedot"></span><b class="lv">LIVE</b><span class="time" id="ttime"></span>
+const transport = (sp = "") => world().live ? `<div class="transport livebar"${sp}><span class="livedot"></span><b class="lv">LIVE</b><span class="time" id="ttime"></span>
      <span class="lnote">Recorded rows loop beside your box. Live can't be paused or sped up; slide a row with ‹ › to line it up.</span><span class="grow"></span>
-     <button class="btn quiet" data-act="restart" title="Start every recorded row from the top of its clip, now">↺ Restart recordings</button></div><div class="phase" id="phase"></div>` : `<div class="transport"><button class="playbtn" id="play"></button><span class="time" id="ttime"></span>
+     <button class="btn quiet" data-act="restart" title="Start every recorded row from the top of its clip, now">↺ Restart recordings</button></div><div class="phase" id="phase"${sp}></div>` : `<div class="transport"${sp}><button class="playbtn" id="play"></button><span class="time" id="ttime"></span>
      <input type="range" id="scrub" min="0" max="${world().dur}" step="1">
-     <div class="seg sp">${[4, 12, 30].map(x => `<button data-x="${x}" class="${x === st.speed ? "on" : ""}">×${x}</button>`).join("")}</div></div><div class="phase" id="phase"></div>`;
+     <div class="seg sp">${[4, 12, 30].map(x => `<button data-x="${x}" class="${x === st.speed ? "on" : ""}">×${x}</button>`).join("")}</div></div><div class="phase" id="phase"${sp}></div>`;
 const ALL_R = [["power", "Power"], ["hbm_bw", "HBM bandwidth"], ["nvlink", "NVLink traffic"], ["tensor", "Tensor cores busy"], ["net_tx", "Network between nodes"]];
 const cb = ([k, n]) => `<label class="cb"><input type="checkbox" data-strip="${k}"${st.strips.has(k) ? " checked" : ""}>${n}</label>`;
 const zoomSeg = () => world().live ? "" : `<div class="seg zm"><button data-zoom="0" class="${st.zoom ? "" : "on"}">Last minute</button><button data-zoom="1" class="${st.zoom ? "on" : ""}">Whole clip</button></div>`;
-const telePane = () => pane("Telemetry", `<div id="tele"></div>`, zoomSeg() + `<details class="menu"${st.menuOpen ? " open" : ""}><summary>Readings</summary><div>${ALL_R.map(cb).join("")}</div></details>`);
+const telePane = (sp = "") => pane("Telemetry", `<div id="tele"></div>`, zoomSeg() + `<details class="menu"${st.menuOpen ? " open" : ""}><summary>Readings</summary><div>${ALL_R.map(cb).join("")}</div></details>`, sp);
 function steps() {
   const bs = BOXES.boxes;
   const s3 = bs.length
@@ -905,25 +907,28 @@ function paintArch(W, now) {
 // Right column: the diagram, by itself.
 function render() {
   if (!IDX || (st.mode === "check" && !PAIRS)) { $("#app").innerHTML = `<p class="lede">Loading the recordings…</p>`; return; }
-  // The spotlight (his pick, 2026-11-21): the first time step 2 opens in a visit, everything but the two panes that hold
-  // the check dims, and the page scrolls to them. Only a click on those panes lifts it; there is no timer.
-  if (st.mode === "check" && !st.spotSeen) { st.spotSeen = true; st.spot = true; setTimeout(() => { const p = $("[data-spot]"); if (!p) return; p.scrollIntoView({ behavior: "smooth", block: "center" });
+  // The spotlight (his picks, 2026-11-21 and -22): the first time each step opens in a visit, everything but its main
+  // panes dims (step 1: the workload tabs, the play bar and the telemetry; step 2: the declared workloads and the rules),
+  // then fades back after 5 s. Step 2 also scrolls to its panes.
+  if (st.spot && st.spot !== st.mode) spotOff();
+  if (!st.spot && !st.spotSeen[st.mode]) { st.spotSeen[st.mode] = true; st.spot = st.mode; clearTimeout(st.spotT); st.spotT = setTimeout(spotOff, 5000); }
+  if (st.spot === "check" && !st.spotScrolled) { st.spotScrolled = true; setTimeout(() => { const p = $("[data-spot]"); if (!p) return; p.scrollIntoView({ behavior: "smooth", block: "center" });
     setTimeout(() => { const r = p.getBoundingClientRect(); if (r.top > innerHeight * 0.8) p.scrollIntoView({ block: "center" }); }, 900); }, 80); }   // smooth scrolling stalls in some embedded views
-  const raw = st.mode === "raw", W = cur().W;
+  const raw = st.mode === "raw", W = cur().W, sp1 = raw ? " data-spot" : "";
   const note = raw ? `<span class="stepnote">step 2</span>` : "";
   const cls = s => raw ? s.replace('class="pane"', 'class="pane later"') : s;
   $("#app").innerHTML = `<div class="cols"><div>
       <div class="head"><h1>Replay demo</h1><span class="grow"></span><button class="btn" data-act="add">＋ Add your GPUs</button></div>
-      <div class="sel"><div class="pills big"><button data-mode="raw" class="${raw ? "on" : ""}">See the telemetry</button><button data-mode="check" class="${raw ? "" : "on"}">Check it against declarations</button></div>
+      <div class="sel"${sp1}><div class="pills big"><button data-mode="raw" class="${raw ? "on" : ""}">See the telemetry</button><button data-mode="check" class="${raw ? "" : "on"}">Check it against declarations</button></div>
         ${raw ? pillsRaw(true) : declTable()}</div>
-      ${transport()}
+      ${transport(sp1)}
       ${st.addOpen ? pane("Add your own GPUs", steps(), `<button class="btn quiet" data-act="add">✕</button>`) : ""}
-      ${telePane()}
+      ${telePane(sp1)}
       ${cls(pane("Declared workloads", `<div class="tl${raw ? " nolink" : ""}" id="tl"></div>` + (raw ? "" : `<details class="sacct" id="sacct"${st.sacctOpen ? " open" : ""}><summary>Slurm table as reported <span class="sub" id="sacctsub"></span></summary><pre id="sacctpre"></pre></details>`), note, raw ? "" : " data-spot"))}
       ${cls(pane("Rules", `<div id="rules"></div>`, note, raw ? "" : " data-spot"))}
       <details class="rnote"${raw ? "" : " data-spot"}${st.noteOpen ? " open" : ""}><summary>Note on rules</summary><p>These simple thresholds told apart every workload I recorded, with wide margins. None of the workloads were trying to hide, so robustness is untested; but a wide margin is a good sign for a classifier that is robust enough in practice.</p></details>
     </div><aside class="side">${pane("What flows where", archSVG(W))}</aside></div>`;
-  $("#app").classList.toggle("spotlight", !!st.spot && st.mode === "check");
+  $("#app").classList.toggle("spotlight", st.spot === st.mode);
   bind(); paint();
 }
 function bind() {
@@ -1287,11 +1292,12 @@ setInterval(() => {
   paint();
 }, 200);
 addEventListener("resize", paint);
-// While it's up, a click elsewhere on the page does nothing (the dimmed parts also ignore the pointer); a click on the
-// lit panes lifts it and does nothing else.
-$("#app").addEventListener("click", e => { if (!st.spot || st.mode !== "check") return;
-  e.stopPropagation(); e.preventDefault();
-  if (e.target.closest("[data-spot]")) { st.spot = false; $("#app").classList.remove("spotlight"); } }, true);
+// While it's up, a click elsewhere on the page does nothing (the dimmed parts also ignore the pointer). Pressing on the lit
+// panes lifts it and the click goes through as usual (2026-11-22: lifting on the click itself swallowed that first
+// click, and a pane redrawn between press and release could lose the click entirely, so it took several tries).
+function spotOff() { clearTimeout(st.spotT); st.spot = false; $("#app").classList.remove("spotlight"); }
+$("#app").addEventListener("pointerdown", e => { if (st.spot && e.target.closest("[data-spot]")) spotOff(); }, true);
+$("#app").addEventListener("click", e => { if (st.spot && !e.target.closest("[data-spot]")) { e.stopPropagation(); e.preventDefault(); } }, true);
 render();
 fetch(DATA + "index.json").then(r => r.json()).then(d => { IDX = d; regRecs(); render(); });
 fetch(DATA + "pairs.json").then(r => r.json()).then(d => { PAIRS = d; render(); });
