@@ -38,56 +38,17 @@
     <a href="#live">Live telemetry</a>
     <a href="#slurm">Slurm jobs</a>
     <a href="#raw">Raw data</a>
-    <a href="#connect">Connect a box</a>
   </nav>
   <main>
     <section class="pane" id="p-live"><header><h1>Live telemetry</h1><span class="sub">raw NVML from collector.py · unsigned (v0)</span></header><div class="body"></div></section>
     <section class="pane" id="p-slurm"><header><h1>Slurm jobs</h1><span class="sub">declarations from slurm_reporter.py · the operator's claims, as reported</span></header><div class="body"></div></section>
     <section class="pane" id="p-raw"><header><h1>Raw data</h1><span class="sub">every field, as received</span></header><div class="body"></div></section>
-    <section class="pane" id="p-connect"><header><h1>Connect a box</h1><span class="sub">start streaming from any NVIDIA GPU machine</span></header>
-      <p>Run this <b>on the GPU box</b> (as root if you can). It asks for the site password once, downloads the collector from this node, and installs it so it keeps running.</p>
-      <div class="cmd card"><pre class="mono" id="oneliner"></pre><button data-copy="oneliner">Copy</button></div>
-      <p class="sub" id="tunnelnote" style="display:none">This page is running on <span class="mono">localhost</span>, which a remote box can't reach. Run <span class="mono">./tunnel.sh &lt;ssh-port&gt; &lt;user@box&gt;</span> on this Mac first, so the box's <span class="mono">127.0.0.1:18999</span> leads here.</p>
-      <details class="rawbox"><summary>Or: split one box into several pretend nodes <span class="note">(prototyping)</span></summary>
-      <p>Same thing, but it asks for a split like <span class="mono">4+4</span> or <span class="mono">2+2+4</span> (up to 4 parts, GPUs assigned in order). One collector process; each part shows up as its own node, <span class="mono">&lt;host&gt;-a</span>, <span class="mono">-b</span>…, with its GPUs numbered from 0. Running the normal command above turns the split off again.</p>
-      <div class="cmd card"><pre class="mono" id="oneliner-split"></pre><button data-copy="oneliner-split">Copy</button></div>
-      <p class="sub">Fine for pipeline checks, not evidence: the parts share one clock, one chassis and NVLink (real nodes talk over InfiniBand). See SPLIT_CAVEATS.md.</p>
-      </details>
-      <h3 style="margin-top:22px">Connect a scheduler (Slurm)</h3>
-      <p>Run this <b>once per cluster</b>, wherever <span class="mono">sbatch</span> works (the controller or a login node). It doesn't need GPUs. Every 5 s it reads Slurm's job table (<span class="mono">scontrol show job</span>, read-only) and sends it here; jobs then appear under <a href="#slurm">Slurm jobs</a>. Declare a job with <span class="mono">sbatch --comment=declared:pretraining</span> (or <span class="mono">inference</span>). No Slurm on the machine? It offers to install a one-box Slurm for testing (needs root + apt).</p>
-      <div class="cmd card"><pre class="mono" id="oneliner-slurm"></pre><button data-copy="oneliner-slurm">Copy</button></div>
-      <p class="sub">Afterwards: <span class="mono">python3 ~/.twc-slurm-reporter/slurm_reporter.py status</span> (or <span class="mono">once</span> to print what it would send, or <span class="mono">uninstall</span>).</p>
-      <h3 style="margin-top:22px">What install does</h3>
-      <ul class="plain">
-        <li>Copies itself to <span class="mono">~/.twc-collector/</span> and saves the settings there (owner-only, since they hold the password).</li>
-        <li>Installs <span class="mono">nvidia-ml-py</span> if it's missing, in a private venv.</li>
-        <li>Keeps it running with whatever this machine has: <b>systemd</b> (normal Linux machines, needs root), else <b>supervisor</b> (e.g. vast images), else a background restart loop plus a cron <span class="mono">@reboot</span> entry.</li>
-      </ul>
-      <h3 style="margin-top:22px">On the box afterwards</h3>
-      <pre class="raw mono">python3 ~/.twc-collector/collector.py status      # running? last log lines
-python3 ~/.twc-collector/collector.py uninstall   # stop and remove</pre>
-      <p class="sub">The box appears under Live telemetry within a few seconds, named after its hostname (add <span class="mono">--host NAME</span> to choose).</p>
-    </section>
   </main>
 </div>
 <script src="/static/live.js"></script>
 <script>
   let tab = "live", last = null;
-  const R = { live: TWCLive.renderLive, slurm: el => renderSlurm(el), raw: TWCLive.renderRaw, connect: () => {} };
-  // the one-liner: on Fly the box talks to this site directly; on localhost it goes through tunnel.sh
-  const local = ["localhost", "127.0.0.1"].includes(location.hostname);
-  const fetchUrl = local ? "http://127.0.0.1:18999" : location.origin;
-  // A wrong password gets a redirect with an empty body, which curl saves without complaint; hence the -s check.
-  let SITE_PW = false;   // no site password (2026-11-21): the one-liners just download and run
-  const fetchAndRun = (file, args) => !SITE_PW ? `curl -fsS ${fetchUrl}/${file} -o /tmp/${file} && python3 /tmp/${file} ${args}`
-    : `read -rsp "TWC password: " P; echo; curl -fsSu ":$P" ${fetchUrl}/${file} -o /tmp/${file} && if [ -s /tmp/${file} ]; then TWC_PASSWORD="$P" python3 /tmp/${file} ${args}; else echo "Couldn't download ${file}: wrong password?"; fi`;
-  const installArgs = `install --node ${fetchUrl}`;
-  const oneLiners = () => { document.getElementById("oneliner").textContent = fetchAndRun("collector.py", installArgs);
-    document.getElementById("oneliner-split").textContent = fetchAndRun("collector.py", installArgs + " --split ask");
-    document.getElementById("oneliner-slurm").textContent = fetchAndRun("slurm_reporter.py", installArgs); };
-  oneLiners(); fetch("/api/site").then(r => r.json()).then(d => { SITE_PW = !!d.password; oneLiners(); }).catch(() => {});
-  document.getElementById("tunnelnote").style.display = local ? "block" : "none";
-  document.querySelectorAll("[data-copy]").forEach(b => b.onclick = e => { navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent); e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy", 1200); });
+  const R = { live: TWCLive.renderLive, slurm: el => renderSlurm(el), raw: TWCLive.renderRaw };
   // ---- Slurm jobs: the declarations, straight from /api/slurm (polled with the live data, 1 s)
   const esc = x => String(x ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const hms = t => t ? new Date(t * 1000).toLocaleTimeString([], { hour12: false }) : "";
@@ -133,7 +94,7 @@ python3 ~/.twc-collector/collector.py uninstall   # stop and remove</pre>
   async function renderSlurm(el) {
     let d; try { d = await (await fetch("/api/slurm")).json(); } catch (e) { return; }
     if (!d.clusters.length) {
-      el.innerHTML = `<p class="empty">No Slurm reporter has connected yet. Install one from <a href="#connect">Connect a box</a> → Connect a scheduler.</p>`;
+      el.innerHTML = `<p class="empty">No Slurm reporter has connected yet. Section 3 of the <a href="/walkthrough">Walkthrough</a> connects one.</p>`;
       return;
     }
     if (!el.querySelector(".cl")) el.innerHTML = "";

@@ -69,10 +69,10 @@
     const r = await fetch("/api/replay/" + (b.dataset.act === "replay-start" ? "start" : "stop"), { method: "POST" });
     if (!r.ok) b.textContent = (await r.json().catch(() => ({}))).error || "Failed";
   });
-  // connectHref: "#connect" on Debug (its own sub-page); other pages pass "/debug#connect"
+  // connectHref: where "Connect a box" goes; the Walkthrough's section 1 installs the collector (Debug's own Connect page went, 2026-11-22)
   const noDataBarFor = connectHref => `<div class="nodata"><a class="act" href="${connectHref}">Connect a box</a>
     <button class="act" data-act="replay-start">Play a recorded trace</button></div>`;
-  const noDataBar = noDataBarFor("#connect");
+  const noDataBar = noDataBarFor("/walkthrough");
 
   // short: just the state (compact view), without the batch count
   const statusLine = (h, short) => {
@@ -166,7 +166,7 @@
     tip.style.left = Math.min(X(hoverAgo) + 8, W - tip.offsetWidth - 4) + "px"; tip.style.top = "2px";
   }
 
-  // opts (optional, remembered on el): { compact: true, connectHref: "/debug#connect" } for the short
+  // opts (optional, remembered on el): { compact: true, connectHref: "/walkthrough" } for the short
   // version other pages mount. Without opts this is the Debug page's view, unchanged.
   function renderLive(el, data, opts) {
     if (opts) el._opts = opts;
@@ -210,7 +210,7 @@
       const room = hosts.filter(x => data[x].age_s <= 60).length < MAX_BOXES;
       const acts = el.querySelector(".acts");   // the compact view has no hint row, so no buttons beside it
       if (acts) acts.innerHTML = !hosts.length ? "" :
-        (room ? `<a class="act" href="#connect">Connect another box</a>` : "") +
+        (room ? `<a class="act" href="/walkthrough">Connect another box</a>` : "") +
         (replaying ? "" : `<button class="act" data-act="replay-start"${room ? "" :
           ` disabled title="All ${MAX_BOXES} slots are taken. A box has to stop (or be silent for 60 s) first."`}>Play a recorded trace</button>`);
     }

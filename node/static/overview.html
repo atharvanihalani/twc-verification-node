@@ -56,17 +56,19 @@
 </head>
 <body>
 <script src="/static/nav.js"></script>
-<!-- Text: Atharva's draft, "[Internal] Prototype: Telemetry-based Compute Verification" (dated Nov 10, 2026; this is
-     the export he gave on Nov 16, "... (2).md"), placed verbatim (typos included) up to and including the thank-yous;
-     the notes after them are left out. His placeholders are highlighted. Changes from the doc: links to the demo
-     site point inside this site (/debug#...), the fly.io link uses https, and his email is left off the byline.
+<!-- Text: Atharva's Google Doc "[Shared] A Prototype of Telemetry-based Compute Verification", tab "Draft 4"
+     (dated Nov 22, 2026; synced 2026-11-22), placed verbatim (typos included) up to and including the thank-yous;
+     the notes after them are left out. Changes from the doc: links to the demo site point inside this site
+     (/debug#...), his email is left off the byline (it stays in his "Reach out" link), the doc's "Ask before sharing"
+     line is left off, and in the second "Consistency Checking" bullet only its label is bold (the doc bolds all of it).
+     The footnotes are from the Nov 16 export (the Drive text export doesn't carry footnotes).
      The two diagrams are the same drawings as the doc's, from the sharper Nov 7 PDF export.
      Earlier versions: Nov 11 export (git history), Nov 7 draft at ../../parked-pages/overview-v0/. -->
 <main class="essay">
   <!-- Header: variant "A · Paper" (his pick, 2026-11-17; mock in ../../mock-ups/overview-top-variants.html), with
        "Lucid Computing", "Summary" instead of "Abstract", no keywords, and the summary in his own words for now. -->
   <header class="paper">
-    <h1>Telemetry-Based Compute Verification:<br> A Working Prototype</h1>
+    <h1>Telemetry-based Compute Verification:<br> A Working Prototype</h1>
     <p class="by">Atharva Nihalani</p>
     <p class="aff">Lucid Computing · November 2026</p>
     <div class="actions">
@@ -77,33 +79,41 @@
 
   <div class="tldr">
     <span class="sc">Summary</span>
-    <p>This is an interactive proof-of-concept for a Telemetry-based approach to Compute Verification. I implement a classifier that uses telemetry data (eg. power or networking data) to confirm whether the Prover’s workloads are compliant with three rules.</p>
-    <p>In the demo, you can watch telemetry data reported from many pre-training and inference workload variants I’ve run, and see whether these workloads can evade the classifier. You can also connect your own box to investigate telemetry from custom workloads. In this toy setting, my classifier correctly identifies compliance across 11 tested workloads <span class="todo">[update number]</span> over all 3 rules.</p>
-    <p>There are two uncertainties this demo doesn’t address.</p>
+    <p>Telemetry-based verification is a currently-unproven, hardware-light, quickly deployable approach to compute verification for <a href="https://www.pacingthefrontier.com/">Pacing the Frontier</a>. This is a working prototype that can be scaled up to run in a production datacenter.</p>
+    <p>There are two uncertainties to scaling this up.</p>
     <ul>
-      <li>Whether this telemetry can be signed, to prevent the Prover from spoofing it before it reaches the classifier</li>
-      <li>The adversarial robustness of this classifier</li>
+      <li>Can you trust reported telemetry to be unmodified?</li>
+      <li>How adversarially robust is this classifier with real workloads?</li>
     </ul>
+    <p>Lucid Computing is working on both of these. <a href="mailto:atharva@lucidcomputing.ai">Reach out</a> if you want to learn more.</p>
   </div>
 
-  <h2>What is Telemetry-based Verification?</h2>
-  <p>Telemetry-based Verification uses real time telemetry data from GPUs to verify whether their active workloads agree with what has been declared. <b>It is a hardware-light, quickly-deployable approach to Compute Verification</b>.</p>
-  <p>Telemetry data refers to the ‘metadata’ of a GPU. For example- a GPU’s power utilization, or the percentage of HBM that’s occupied, or the number of bytes flowing over the scale-up interconnect domain, etc.</p>
-  <p>Different workloads exhibit different patterns of telemetry. For example- inference happens in pods- which means you see high communication within a pod, but very little across pod boundaries. Alternatively- pre-training involves regular checkpointing of weights, which causes periodic power dips, that are synchronous over many GPUs. Ultimately, the question is- Can we use these telemetry signatures to verify that workloads are compliant with agreed-upon rules?</p>
+  <h2>What is Telemetry-based Compute Verification?</h2>
+  <p>Telemetry-based verification uses live GPU telemetry to verify whether a cluster’s active workloads comply with pre-agreed rules.</p>
+  <p>Telemetry is GPU metadata. For example, power utilization, HBM bandwidth, network data over NVLink, etcetera. Different workloads have different telemetry patterns; we can use these patterns to understand properties of the workloads.</p>
+  <p>For example, inference is conducted in pods of o(100) GPUs. This means there’s a lot of communication within a single pod, but very little across pod boundaries. Alternatively, pre-training involves highly frequent gradient updates and frequent checkpointing. These manifest as periodic power dips, that are synchronous across many GPUs.</p>
+
+  <h2>Consistency Checking, not Classification</h2>
+  <p>Previous literature has focused on using telemetry to ‘reverse engineer’ the workload that was running. This faces problems when you scale it up:</p>
+  <ul>
+    <li><b>How do you classify multiple workloads?</b> In a real cluster, your classifier receives unstructured data from o(100K) GPUs. Before it can classify the workloads, it needs to segment this data into different workload partitions- which is a harder problem than the classification.</li>
+    <li><b>Sheer difficulty of multi-class classification.</b> Verification solutions must have negligible error, especially if used for high-stakes agreements. It’s far easier to check for anomalies, or deviations from declared workloads, than to precisely classify workloads without conditioning on any information.</li>
+  </ul>
+  <p>This approach requires the Prover to declare their intended workloads ahead of time, and checks them against reported telemetry.</p>
 
   <h2>Verification Architecture</h2>
   <figure><img src="/static/overview/fig-architecture.png" alt="Inside the prover (neocloud or lab), GPUs send evidence (signed telemetry) to a verification node, which sends reported information to the verification organization (government, Averi, etc.)."></figure>
   <h3>Terminology</h3>
   <ul>
-    <li>Prover: The datacenter operator who needs to prove their workloads are compliant with an AI agreement. Assumed adversarial.</li>
-    <li>Verifier: The Independent Verification Organization that responsible for verifying compliance with the agreement.</li>
-    <li>Verification Node: A physical, tamper-resistant server, that receives data from the Prover’s GPUs, runs a classifier to ensure compliance, and reports this information to the Verifier.</li>
-    <li>Collectors: Programs running on each of the Prover’s GPU nodes that report telemetry data to the Verification Node.</li>
+    <li><b>Prover</b>: The datacenter operator who needs to prove their workloads are compliant with an AI agreement. Assumed adversarial.</li>
+    <li><b>Verifier</b>: The Independent Verification Organization that’s responsible for verifying compliance with the agreement.</li>
+    <li><b>Verification Node</b>: A physical, tamper-resistant server. It receives data from the Prover’s GPUs, runs a classifier to ensure compliance, and reports this information to the Verifier.</li>
+    <li><b>Collectors</b>: Programs running on each of the Prover’s GPU nodes that report real-time telemetry to the Verification Node.</li>
   </ul>
   <p>This architecture must guarantee at least two security properties</p>
   <ul>
-    <li>Integrity of information received by the Verifier</li>
-    <li>Confidentiality of sensitive information gathered from the Prover</li>
+    <li><b>Integrity</b> of information received by the Verifier</li>
+    <li><b>Confidentiality</b> of sensitive information gathered from the Prover</li>
   </ul>
   <p>To ensure the integrity of reported information, we must guarantee the integrity of (a) inbound information to the Verification Node, (b) the Verification Node itself, and (c) outbound information from the Verification Node to the Verifier. For (a) we’re assuming it will be possible to sign telemetry on the GPU die itself, before the prover has a chance to spoof it. (This is not possible with current firmware versions, though a firmware upgrade might enable it.)<sup class="fn"><a id="fnref1" href="#fn1">1</a></sup> For (b) we rely on tamper-proof or tamper-evident enclosures around the Verification Node, to prevent the Prover from physically reading the private key, or otherwise tampering with the node. And for (c), we assume the Verification Node signs outbound traffic.</p>
   <p>The Prover’s telemetry must also be kept confidential. Side-channel analysis on telemetry can reveal sensitive IP<sup class="fn"><a id="fnref2" href="#fn2">2</a></sup>, which the Prover would not want to leak. So, all telemetry processing must be done on-site. The Prover should also have visibility into outbound traffic, to ensure the Verification Node isn’t exfiltrating sensitive information. Additionally, any reported information must be minimal, and the format must be pre-agreed, to minimize risks from any steganographic smuggling.</p>
@@ -112,7 +122,7 @@
 
   <h2>Prototype Details</h2>
   <p>This demo implements the above architecture. The Verification Node / Collector is running in this <a href="https://fly.io">fly.io</a> container, that accepts streamed telemetry input from collector.py. For this demonstration, I’m replaying locally stored telemetry data that was generated from pre-training and inference workload variants. I also implement a classifier that consumes telemetry from a rolling 60s window to check compliance with three rules.</p>
-  <p>Collector.py sends telemetry to the verification node at 1 hz <span class="todo">[confirm]</span>. This telemetry is polled from NVML, and includes per-GPU power draw, memory bandwidth, and networking data, amongst other fields [<a href="/debug#raw">link</a>].</p>
+  <p>Collector.py samples telemetry at 1-10 hz, and sends this batched to the verification node. This telemetry is polled from NVML, and includes per-GPU power draw, memory bandwidth, and networking data, <a href="/debug#raw">amongst other fields</a>.</p>
   <figure><img src="/static/overview/fig-demo.png" alt="GPUs send reported telemetry to the verification node; the central scheduler sends declared Slurm workloads to the same node."></figure>
   <p>There are two types of data the Collector receives- telemetry and declared workloads. Telemetry is reported at the node-level- ie. the collector can receive telemetry from multiple nodes simultaneously, as it would in a real deployment. This is overlaid on a graph [<a href="/debug#live">link</a>].</p>
   <p>The declared workload is reported by the scheduler running at the cluster-level. A second script runs on the head node to report the Slurm logs [<a href="/debug#slurm">link</a>]. The Verifier Node then uses the telemetry to confirm whether what’s running matches what was declared.</p>
@@ -124,15 +134,15 @@
 
   <h3>How are my classifiers implemented?</h3>
   <p>I implement three rules for this demonstration: GPUs never run undeclared loads, there’s no data flowing across declared partitions / pod boundaries, and workloads declared inference are not doing training.</p>
-  <p>No Undeclared Workloads: If your scheduler doesn’t declare a workload, your GPU shouldn’t run anything. Classification rule- is your power utilization above baseline (200W for Hopper GPUs, 300W for Blackwells)?</p>
-  <p>No Cross-Partition Traffic: Inference takes place in pods of o(dozens) GPUs. If a partition is truly doing inference, there should be no traffic flowing across the east-west GPU fabric- because inference pods are independent units that don’t need to communicate. Classification rule- is network data above a low threshold (1MB/s).</p>
-  <p>No Hidden Training: If you declare a workload as inference, you shouldn’t be doing training instead. Inference is communication intensive, because (a) autoregressive decoding means you spend more time moving weights between HBM and the logic dies, and (b) you’re also moving the large KV-cache between HBM and logic. Classification rule- is tensor core utilization above 40%?</p>
+  <p><b>Undeclared Workloads</b>: If your scheduler doesn’t declare a workload, your GPU shouldn’t run anything. Classification rule- is your power utilization above baseline (200W for Hopper GPUs, 300W for Blackwells)?</p>
+  <p><b>Cross-Partition Traffic</b>: Inference takes place in pods of o(dozens) GPUs. If a partition is truly doing inference, there should be no traffic flowing across the east-west GPU fabric- because inference pods are independent units that don’t need to communicate. Classification rule- is network data above a low threshold (1MB/s).</p>
+  <p><b>Hidden Training</b>: If you declare a workload as inference, you shouldn’t be doing training instead. Inference is communication intensive, because (a) autoregressive decoding means you spend more time moving weights between HBM and the logic dies, and (b) you’re also moving the large KV-cache between HBM and logic. Classification rule- is tensor core utilization above 40%?</p>
   <p>These simple thresholds told apart every workload I recorded, with wide margins. None of the workloads were trying to hide, so robustness is untested; but a wide margin is a good sign for a classifier that is robust enough in practice.</p>
 
   <h2>Open Problems</h2>
   <p>As mentioned above, the two big uncertainties are (a) signing telemetry, and (b) adversarial robustness. If the telemetry is unsigned, the prover can likely spoof it before reaching the classifier. Also, these current rules have not been sufficiently red-teamed.</p>
   <p>Besides these, a production setup would also include: verifiying signed telemetry, nonce provisioning, PKI; redundancy in system design (eg. multiple Verification Nodes); mechanisms to escalate failures (eg. what happens if GPUs temporarily go dark?); and physical tamper-evident servers running over large clusters.</p>
-  <p>Thank you to Amir Sarid, Andreas Turanski, Emlyn Graham, Fred Parkwood, Jay Bailey, Noah Rousell for helpful comments and feedback.</p>
+  <p><i>Thank you to Amir Sarid, Andreas Turanski, Emlyn Graham, Fred Parkwood, Jay Bailey, Leon Eshuijs, and Noah Rousell for helpful discussion and comments.</i></p>
 
   <ol class="notes">
     <li id="fn1">There might also exist other ways to fingerprint this telemetry. Alternatively, a verifier could install hardware <a href="#fnref1" aria-label="Back to the text">↩</a></li>

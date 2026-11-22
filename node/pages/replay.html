@@ -534,7 +534,7 @@ const MOCK_STRIPS = [
   { key: "net_tx", label: "Network sent to other nodes (whole node)", h: SH, max: niceMax, unit: "GB/s", fmt: v => v.toFixed(3) + " GB/s" },
 ];
 MOCK_STRIPS.forEach(st => st.gpuColor = washOf);
-const TELE_OPTS = { compact: true, strips: MOCK_STRIPS, connectHref: "/debug#connect" };
+const TELE_OPTS = { compact: true, strips: MOCK_STRIPS, connectHref: "/walkthrough" };
 
 const TYPE = { inference: "#2a78d6", pretraining: "#3f8f5b" }, RED = "#d03b3b", NONE = "#888780";
 
@@ -1027,7 +1027,7 @@ function act(a) {
 // ---------------------------------------------------------------- painting (runs 5× a second)
 function paintTele(el, list) {
   if (!el) return;
-  const W = list[0].W, base = { compact: true, strips: MOCK_STRIPS.filter(q => st.strips.has(q.key)), connectHref: "/debug#connect" };
+  const W = list[0].W, base = { compact: true, strips: MOCK_STRIPS.filter(q => st.strips.has(q.key)), connectHref: "/walkthrough" };
   if (!st.zoom || W.live) return TWCLive.renderLive(el, teleData(list), base);
   // zoomed out: the whole clip on the axis, a playhead at "now", a faint line wherever the first node's recording changes phase
   const n0 = W.nodes[0], marks = IDX.recs[n0.rec].phases.map(q => W.dur - (q[0] - n0.off)).filter(a => a > 0 && a < W.dur);
