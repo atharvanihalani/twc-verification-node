@@ -90,6 +90,10 @@
   .srm:hover { color: var(--ink); }
   .sadd { font: inherit; font-size: 13px; border: 0; background: none; color: var(--ink2); cursor: pointer; padding: 2px 0 0 11px; justify-self: start; }
   .sadd:hover { color: var(--ink); }
+  /* the step-2 spotlight: everything but the check dims and stops taking clicks until the check is clicked once */
+  #app .cols > div > *, #app .side { transition: opacity .6s ease, filter .6s ease; }
+  #app.spotlight .cols > div > *:not([data-spot]), #app.spotlight .side { opacity: .28; filter: saturate(.4); pointer-events: none; }
+  #app.spotlight [data-spot] { cursor: pointer; }
   /* step 2: truth vs declaration (2026-11-21) */
   .dtab { border-collapse: collapse; width: 100%; margin: 2px 0 6px; }
   .dtab th { text-align: left; font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 0 8px 6px; border-bottom: 1px solid var(--grid); }
@@ -114,20 +118,23 @@
   .pgrid td { width: 54px; height: 24px; text-align: center; border: 1px solid var(--grid); cursor: pointer; }
   .pgrid td.y { background: color-mix(in srgb, var(--good) 12%, var(--surface)); color: var(--good); }
   .pgrid td.n { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); color: var(--crit); }
-  .pgrid td.sel { outline: 2px solid var(--ink); }
+  .pgrid td.cur { outline: 2px solid var(--ink); outline-offset: -2px; }   /* not "sel": the page's selector block uses that class */
   .gleg { margin: 4px 0 0 80px; font-size: 12px; color: var(--muted); max-width: 560px; }
   .dtab .xrm { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 0 0 6px; }
   .dtab .xrm:hover { color: var(--ink); }
-  .xadd { margin: 0 0 4px 8px; }
+  .xadd { display: block; margin: 0 0 6px; padding-left: 8px; }   /* same look as Side by side's "＋ Add a node" */
   .fromslurm { display: inline-grid; font-size: 13px; color: var(--ink2); } .fromslurm small { font-size: 11px; color: var(--muted); }
   .dtag { font-size: 12.5px; padding: 1px 8px; } .dtag.i { color: #2a78d6; background: color-mix(in srgb, #2a78d6 12%, transparent); }
   .dtag.p { color: #3f8f5b; background: color-mix(in srgb, #3f8f5b 14%, transparent); }
   .dtab .sseg .pop button small { color: var(--muted); font-size: 11.5px; margin-left: auto; padding-left: 14px; }
   /* External box rows, offsets and the live bar (2026-11-21) */
-  .shift { display: inline-flex; align-items: center; margin-left: 10px; border: 1px solid var(--grid); border-radius: 6px; }
-  .shift button { font: 12px ui-monospace, Menlo, monospace; border: 0; background: none; color: var(--muted); padding: 1px 6px; cursor: pointer; }
-  .shift button:hover { color: var(--ink); background: var(--grid); }
-  .shift .sv { color: var(--muted); min-width: 52px; } .shift .sv.moved { color: var(--ink); font-weight: 600; }
+  .scrubchip { display: inline-grid; justify-items: center; gap: 2px; margin-left: 10px; padding: 1px 8px 2px; border: 1px solid var(--grid); border-radius: 6px; cursor: ew-resize; touch-action: none; user-select: none; }
+  .scrubchip .sv { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); white-space: nowrap; } .scrubchip .sv i { font-style: normal; color: var(--axis); margin-right: 4px; }
+  .scrubchip.moved .sv { color: var(--ink); font-weight: 600; }
+  .scrubchip:hover, .scrubchip.drag { border-color: var(--axis); }
+  .scrubchip .mb { display: block; width: 56px; height: 5px; } .scrubchip .mb .t { fill: var(--grid); } .scrubchip .mb .w { fill: var(--axis); }
+  .scrubchip:hover .mb .w, .scrubchip.drag .mb .w { fill: var(--rc); }
+  body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none; }
   .xdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 5px; vertical-align: 1px; }
   .xname { font: inherit; font-size: 13.5px; border: 0; border-bottom: 1px dashed var(--axis); background: transparent; padding: 2px 4px; width: 160px; color: var(--ink); outline: none; font-style: italic; }
   .xname::placeholder { color: var(--muted); }
@@ -314,9 +321,9 @@ function need(W) { for (const n of W.nodes) if (n.rec) for (const [sfx, store] o
     fetch(url).then(r => r.json()).then(d => { store[n.rec] = d; paint(); }); } }
 // The rules: code name (what the rule engine and the data call it), readable title (TITLE in node/rules/*.py),
 // a short form for tight spots (the diagram's report, labels over the timeline), one line, and its heading in rules.md.
-const RULES = [["undeclared_load", "No undeclared workloads", "undeclared workload", "No busy GPU outside a declared job", "rule-1-no-undeclared-workloads"],
-               ["training_shaped", "No hidden training", "hidden training", "Inference jobs don't look like training", "rule-2-no-hidden-training"],
-               ["boundary_traffic", "No cross-partition traffic", "cross-partition traffic", "Separate jobs don't send bulk data to each other", "rule-3-no-cross-partition-traffic"]];
+const RULES = [["undeclared_load", "Undeclared workloads", "undeclared workload", "No busy GPU outside a declared job", "rule-1-undeclared-workloads"],
+               ["training_shaped", "Hidden training", "hidden training", "Inference jobs don't look like training", "rule-2-hidden-training"],
+               ["boundary_traffic", "Cross-partition traffic", "cross-partition traffic", "Separate jobs don't send bulk data to each other", "rule-3-cross-partition-traffic"]];
 const RTITLE = Object.fromEntries(RULES.map(r => [r[0], r[1]])), RSHORT = Object.fromEntries(RULES.map(r => [r[0], r[2]]));
 // The code on GitHub, linked from the page so readers can check things for themselves (his ask, 2026-11-16)
 const GH = "https://github.com/atharvanihalani/twc-verification-node/blob/main/";
@@ -394,16 +401,17 @@ function rawWorld() {
         if (s.mode === "live") { const b = BOXES.boxes.find(x => x.host === s.host) || { gpus: 8, gpu: "GPU" };
           W.nodes.push({ name: `node-${LETTERS[li++]}`, live: s.host, gpus: b.gpus, gpu: b.gpu, off: 0, label: s.name || "" }); W.live = true; continue; }
         const r = IDX.recs["x:" + s.rid]; if (!r) { li++; continue; }
-        const shift = s.shift = Math.max(0, Math.min(r.n - 30, s.shift || 0));
-        const n = { name: `node-${LETTERS[li++]}`, rec: "x:" + s.rid, gpus: r.gpus, gpu: r.gpu, off: shift, len: r.n - shift, label: r.run };
+        const shift = s.shift = Math.max(30 - r.n, Math.min(r.n - 30, s.shift || 0));
+        const n = { name: `node-${LETTERS[li++]}`, rec: "x:" + s.rid, gpus: r.gpus, gpu: r.gpu, off: shift, len: r.n, label: r.run };
         W.nodes.push(n); durs.push(n.len); continue; }
       const c = clipOf(sideCell(s));
       const ns = c.nodes.map(([nm, rec]) => nodeOf([`node-${LETTERS[li++]}${nm.includes(" · ") ? " · " + nm.split(" · ")[1] : ""}`, rec], c.at, c.before));
-      // the row's offset slides its clip within the recording: back to see what came before, on to skip ahead;
-      // kept to what the recording holds, with at least a minute left (his ask, 2026-11-21)
-      const lo = Math.max(...ns.map(n => -n.off)), hi = Math.min(...ns.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off - 60));
-      s.shift = Math.max(lo, Math.min(hi, s.shift || 0));
-      ns.forEach(n => { n.off += s.shift; n.len = IDX.recs[n.rec].mark[c.to] + c.after - n.off; });
+      // The row's offset slides its clip within the recording (his ask, 2026-11-21): back to see what came before, on to
+      // skip ahead. The clip keeps its length, so nothing else gets shorter; where the slide runs past either end of the
+      // recording, the row reads "not recorded" (zero readings). Kept within one clip length either way.
+      const L = Math.min(...ns.map(n => IDX.recs[n.rec].mark[c.to] + c.after - n.off));
+      s.shift = Math.max(-L + 30, Math.min(L - 30, s.shift || 0));
+      ns.forEach(n => { n.len = IDX.recs[n.rec].mark[c.to] + c.after - n.off; n.off += s.shift; });
       W.nodes.push(...ns); durs.push(Math.min(...ns.map(n => n.len))); }
     // With a live node there is no end: recorded nodes loop beside it, each over its own clip.
     if (W.live) { W.dur = null; W.nodes.forEach(n => { if (!n.live) n.loop = n.len; }); }
@@ -424,7 +432,9 @@ function metric(W, n, g, t, key, fine) {
   if (nd.loop) t = t < 0 ? 0 : t % nd.loop;
   const f = fine && REC10[nd.rec], r = f && f.s[key] ? f : REC[nd.rec]; if (!r) return 0;
   const hz = r.hz || 1;
-  return (r.s[key][g] || r.s[key][0])[Math.max(0, Math.min(r.n * hz - 1, Math.floor((t + nd.off) * hz)))] / IDX.scale[key];
+  const i = Math.floor((t + nd.off) * hz);
+  if (i < 0 || i >= r.n * hz) return 0;   // slid past either end of its recording: not recorded
+  return (r.s[key][g] || r.s[key][0])[i] / IDX.scale[key];
 }
 const gpuName = W => (W.nodes[0] && (W.nodes[0].gpu || (IDX.recs[W.nodes[0].rec] || {}).gpu)) || "H200";
 // The Telemetry pane's label beside each node: what it is and what it was really running (his ask, 2026-11-17: friends
@@ -438,9 +448,12 @@ const laneScale = W => /B[23]00/.test(gpuName(W)) ? { max: 1300, grid: 1000, lab
 // One entry per distinct phase: a dot in each such node's colour, then grey text (his pick, 2026-11-12). Always dotted,
 // even with one node or when every node is doing the same thing.
 const BOXC = ["#2a78d6", "#eb6834", "#1baf7a", "#7f5af0", "#d6a419", "#d6467e", "#2fb5c9", "#8a6d4a"];   // live.js's box colours
+// is node n outside its recording at clip time t (slid past either end)?
+function notRec(n, t) { const r = !n.live && IDX.recs[n.rec]; if (!r) return false; if (n.loop) t = t < 0 ? 0 : t % n.loop; const x = t + n.off; return x < 0 || x >= r.n; }
 function phaseOf(n, t) {
   if (n.live) return "live";
   const r = IDX.recs[n.rec]; if (!r) return "";
+  if (notRec(n, t)) return "not recorded";
   if (n.loop) t = t < 0 ? 0 : t % n.loop;
   let s = ""; for (const [pt, name] of r.phases) if (pt <= t + n.off) s = name; return s;
 }
@@ -513,7 +526,7 @@ const TYPE = { inference: "#2a78d6", pretraining: "#3f8f5b" }, RED = "#d03b3b", 
 const st = { mode: "raw" /* raw = step 1 | check = step 2 */, raw: 0, pick: { pre: [0, 0], inf: [0, 0, 1] },
              side: [{ k: "inf", pick: [0, 0, 1] }, { k: "pre", pick: [0, 0] }], ruleOpen: new Set(), noteOpen: false, sacctOpen: false, seg: null /* open menu in Side by side: "row:level" */, zoom: false, howOpen: false, sc: 1, now: 0, paused: false, speed: 12, hold: 0,
              strips: new Set(["power", "hbm_bw", "nvlink"]), menuOpen: false, addOpen: false,
-             addMenu: false, liveT0: null /* box clock when live watching started */, toast: "",
+             addMenu: false, spot: false, spotSeen: false, liveT0: null /* box clock when live watching started */, toast: "",
              pair: { serve: "i1c16", train: "p1b", da: "i", db: "p", lastServe: "i1c16", ext: [] /* {host, mode, rid, decl, shift} */ }, gridOpen: false };
 
 // ---------------------------------------------------------------- connected boxes (External box rows)
@@ -647,7 +660,7 @@ function withExt(base, pkey) {
           : `<span class="k-holds">Holding:</span> no rule is broken on ${name}${past.length ? ` (it broke ${past.length} time${past.length > 1 ? "s" : ""} earlier)` : ""}.` });
       return; }
     const r = IDX.recs["x:" + e.rid]; if (!r) return;
-    const off = e.shift = Math.max(0, Math.min(r.n - 30, e.shift || 0)), len = r.n - off, d = DECL[e.decl], id = 5101 + k;
+    const off = e.shift = Math.max(30 - r.n, Math.min(r.n - 30, e.shift || 0)), len = r.n, d = DECL[e.decl], id = 5101 + k;
     const n = { name, rec: "x:" + e.rid, gpus: r.gpus, gpu: r.gpu, off, len, label: r.run };
     if (live || len < 600) n.loop = len;
     W.nodes.push(n);
@@ -696,16 +709,26 @@ function pillsRaw(on) {
     (st.raw === 2 ? sideRows() : "") + (K ? `<div class="levers">${K.levers.map((lv, L) => `<div><div class="ln">${esc(lv.label)}</div><div class="pills">${lv.opts.map((o, i) =>
       `<button data-lev="${L}" data-i="${i}" class="${i === st.pick[kind][L] ? "on" : has(L, i, 1) ? "" : "far"}"${has(L, i) ? has(L, i, 1) ? "" : ` title="recorded in another combination; choosing it changes the other rows"` : ` disabled title="not recorded yet"`}>${esc(o)}</button>`).join("")}</div></div>`).join("")}</div>` : "");
 }
+// The offset chip (his pick "C", 2026-11-21): hold it and drag sideways to slide the row's clip within its recording,
+// 1 px = 1 s (Shift: 10 s); double-click resets. The thin bar under it shows where the clip sits in the recording:
+// grey, in the row's colour while hovered or dragged.
+const fmtShift = v => v ? (v > 0 ? "+" : "−") + mmss(Math.abs(v)) : "±00:00";
+function clipSpan(s) {   // [clip start, clip length, recording length], seconds
+  if (s.k === "ext") { const r = IDX.recs["x:" + s.rid]; return r ? [s.shift || 0, r.n, r.n] : null; }
+  const c = clipOf(sideCell(s)), r = IDX.recs[c.nodes[0][1]], base = Math.max(0, r.mark[c.at] - c.before);
+  return [base + (s.shift || 0), r.mark[c.to] + c.after - base, r.n];
+}
+const spanBar = sp => { if (!sp) return ""; const [a, len, n] = sp, x0 = Math.max(0, Math.min(1, a / n)), x1 = Math.max(0, Math.min(1, (a + len) / n));
+  return `<svg class="mb" viewBox="0 0 70 6" preserveAspectRatio="none"><rect x="0" y="2" width="70" height="2" class="t"/><rect class="w" x="${(x0 * 70).toFixed(1)}" y="0" width="${Math.max(2, (x1 - x0) * 70).toFixed(1)}" height="6"/></svg>`; };
+const scrubChip = (key, v, sp, color) => `<span class="scrubchip${v ? " moved" : ""}" data-scrub="${key}" style="--rc:${color}" title="Hold and drag sideways to slide this clip within its recording: 1 px = 1 s, with Shift 10 s. Double-click to reset.">` +
+  `<span class="sv"><i>⇆</i>${fmtShift(v)}</span>${spanBar(sp)}</span>`;
 function sideRows() {
   let li = 0; const total = sideNodes(st.side), C = window.BOX_COLORS || ["#2a78d6", "#eb6834", "#1baf7a", "#7f5af0"];
   const extOK = BOXES.boxes.length > 0 || BOXES.recordings.length > 0;
   const kindPop = (i, cur, w) => `<div class="pop">` + ["pre", "inf", "ext"].map(k => {
       const need = k === "ext" ? 1 : KINDS[k].cells[0].nodes.length, ok = (k === cur || total - w + need <= SIDE_MAX) && (k !== "ext" || extOK);
       return `<button data-sk="${i}:${k}" class="${k === cur ? "on" : ""}"${ok ? "" : ` disabled title="${k === "ext" ? "connect a box first: ＋ Add your GPUs" : `at most ${SIDE_MAX} nodes`}"`}>${KTITLE[k]}</button>`; }).join("") + `</div>`;
-  // the offset: slide this row's clip earlier or later within its recording (his ask, 2026-11-21). 0 = where the clip starts today.
-  const shiftCtl = (i, s) => { const v = s.shift || 0;
-    return `<span class="shift" title="Slide this clip earlier or later within its recording, to line it up with the other rows. ‹ › move 10 s; with Shift, 1 minute. Click the time to reset.">` +
-      `<button data-shift="${i}:-10">‹</button><button class="sv${v ? " moved" : ""}" data-shift="${i}:0">${v ? (v > 0 ? "+" : "−") + mmss(Math.abs(v)) : "±00:00"}</button><button data-shift="${i}:10">›</button></span>`; };
+  const shiftCtl = (i, s, color) => scrubChip(`side:${i}`, s.shift || 0, clipSpan(s), color);
   const rows = st.side.map((s, i) => { const first = li, w = sideW(s); li += w;
     const name = w > 1 ? `node-${LETTERS[first]}+${LETTERS[first + 1]}` : `node-${LETTERS[first]}`;
     const sw = Array.from({ length: w }, (_, j) => `<span class="sw" style="background:${C[(first + j) % C.length]}"></span>`).join("");
@@ -725,7 +748,7 @@ function sideRows() {
         (s.mode === "rec" && rec ? `<div class="divl"></div><button class="danger" data-xdel="${i}">Delete “${esc(rec.name)}”</button>` : "") + `</div>` : ""}</span>`;
       const val = s.mode === "live" ? s.name || "" : rec ? rec.name : "";
       const nameBox = `<span class="sep">›</span><input class="xname" data-xname="${i}" value="${esc(val)}" placeholder="name your workload" title="${s.mode === "live" ? "A label for this box; also the name a recording is saved under" : "Rename this recording"}">`;
-      const tail = s.mode === "live" ? `<button class="recbtn" data-recbtn="${i}"></button>` : shiftCtl(i, s);
+      const tail = s.mode === "live" ? `<button class="recbtn" data-recbtn="${i}"></button>` : shiftCtl(i, s, C[first % C.length]);
       return `<div class="srow"><span class="nn">${sw}${name}</span><span class="segs">${kinds}${boxSeg}${modeSeg}${nameBox}${tail}</span>${rm}</div>`; }
     const K = KINDS[s.k];
     const levels = K.levers.map((lv, L) => `<span class="sep">›</span><span class="sseg${isOpen(L) ? " open" : ""}"><button data-sseg="${i}:${L}">${esc(SHOW[s.k][L](lv.opts[s.pick[L]]))}</button>${isOpen(L) ? `<div class="pop"><div class="g">${esc(lv.label)}</div>` +
@@ -733,7 +756,7 @@ function sideRows() {
         const fits = q && total - w + q.nodes.length <= SIDE_MAX;
         const tip = !q ? "not recorded yet" : !fits ? `at most ${SIDE_MAX} nodes` : exact ? "" : "recorded in another combination; the other choices in this row will change";
         return `<button data-sopt="${i}:${L}:${j}" class="${j === s.pick[L] ? "on" : q && !exact ? "far" : ""}"${!q || !fits ? " disabled" : ""}${tip ? ` title="${tip}"` : ""}>${esc(o)}${!q ? "<small>soon</small>" : ""}</button>`; }).join("") + `</div>` : ""}</span>`).join("");
-    return `<div class="srow"><span class="nn">${sw}${name}</span><span class="segs">${kinds}${levels}${shiftCtl(i, s)}</span>${rm}</div>`; }).join("");
+    return `<div class="srow"><span class="nn">${sw}${name}</span><span class="segs">${kinds}${levels}${shiftCtl(i, s, C[first % C.length])}</span>${rm}</div>`; }).join("");
   const add = total < SIDE_MAX ? `<span class="sseg addwrap${st.addMenu ? " open" : ""}"><button class="sadd" data-sadd>＋ Add a node</button>${st.addMenu ? `<div class="pop">` +
     [["pre", "Pretraining", "TorchTitan, Llama 3 8B · recorded"], ["inf", "Inference", "vLLM, DeepSeek V4.1 Flash · recorded"],
      ["ext", "External box", extOK ? [BOXES.boxes.length ? `${BOXES.boxes.length} connected` : "", BOXES.recordings.length ? `${BOXES.recordings.length} recorded` : ""].filter(Boolean).join(" · ") : "connect a box first: ＋ Add your GPUs"]]
@@ -773,7 +796,7 @@ function declTable() {
     : `<button class="glink" data-grid>${okN === all ? `As expected in all ${all} pairs` : `As expected in ${okN} of ${all} pairs`} with these declarations ${st.gridOpen ? "▴" : "▾"}</button>`;
   const grid = !split && st.gridOpen ? `<table class="pgrid"><thead><tr><th></th>${tks.map(tk => `<th>batch ${BATCH[TRAIN_PICK[tk][0]]}<br>${CKPT[TRAIN_PICK[tk][1]]} ckpt</th>`).join("")}</tr></thead><tbody>` +
     keys.map(sk => `<tr><th>${LAYOUTS[SERVE_PICK[sk][0]]} · ${SESS[SERVE_PICK[sk][1]]}</th>` + tks.map(tk => { const w = PAIRS.worlds[`${sk}|${tk}|${P.da}${P.db}`];
-      return `<td data-cell="${sk}:${tk}" class="${w.ok ? "y" : "n"}${sk === P.serve && tk === P.train ? " sel" : ""}" title="${esc(w.did.map(q => q.text).join(" "))}">${w.ok ? "✓" : "✗"}</td>`; }).join("") + `</tr>`).join("") +
+      return `<td data-cell="${sk}:${tk}" class="${w.ok ? "y" : "n"}${sk === P.serve && tk === P.train ? " cur" : ""}" title="${esc(w.did.map(q => q.text).join(" "))}">${w.ok ? "✓" : "✗"}</td>`; }).join("") + `</tr>`).join("") +
     `</tbody></table><p class="gleg">Each cell is a 10-minute pair judged by the real rules. ✓ = what should happen did; ✗ = a miss or a false alarm. Click a cell to play it.</p>` : "";
   // external boxes: what really runs is the box itself; a recording takes a clicked declaration, a live box Slurm's
   const hosts = [...new Set([...BOXES.boxes.map(b => b.host), ...BOXES.recordings.map(m => m.host)])];
@@ -782,7 +805,7 @@ function declTable() {
       seg(`xh${k}`, e.host, hosts.map(h => [h, h, h === e.host, "", BOXES.boxes.some(b => b.host === h) ? "connected" : "recordings only"])) + `<span class="sep">›</span>` +
       seg(`xm${k}`, e.mode === "live" ? "● Live" : rec ? rec.name : "Recorded", [["live", "Live", e.mode === "live", box ? "" : "this box isn't connected right now", box ? "what it's doing now" : ""],
         ...recs.map(m => [`r:${m.id}`, m.name, e.mode === "rec" && m.id === e.rid, "", `${mmss(m.n)} · ${new Date(m.started * 1000).toTimeString().slice(0, 5)}`])]) +
-      (e.mode === "rec" ? `<span class="shift" title="Slide this recording earlier or later, to line it up with the pair. ‹ › move 10 s; with Shift, 1 minute. Click the time to reset."><button data-xshift="${k}:-10">‹</button><button class="sv${e.shift ? " moved" : ""}" data-xshift="${k}:0">${e.shift ? "+" + mmss(e.shift) : "±00:00"}</button><button data-xshift="${k}:10">›</button></span>` : "") + `</span>`;
+      (e.mode === "rec" ? scrubChip(`ext:${k}`, e.shift || 0, rec ? [e.shift || 0, rec.n, rec.n] : null, BOXC[ni]) : "") + `</span>`;
     const J = LIVEJ[e.host], dj = J && J.jobs.filter(j => j.declared);
     const says = e.mode === "rec" ? `<div class="pills dp">` + ["i", "p", "n"].map(d => `<button data-xdecl="${k}:${d}" class="${e.decl === d ? "on " + d : ""}">${{ i: "inference", p: "pretraining", n: "nothing" }[d]}</button>`).join("") + `</div>`
       : `<span class="fromslurm">${!J ? "asking the node…" : !J.slurm ? "no scheduler connected" : dj.length ? dj.map(j => `<span class="dtag ${j.declared[0]}">${j.declared}</span> job ${esc(j.id)}`).join(" · ") : "no declared job on it"}<small>from Slurm, live</small></span>`;
@@ -792,7 +815,7 @@ function declTable() {
   return `<table class="dtab"><thead><tr><th style="width:120px">Node</th><th>What it really runs</th><th style="width:300px">What Slurm declares</th></tr></thead><tbody>
       <tr><td class="nn">${sw(BOXC[0])}${split ? "node-a · prefill" : "node-a"}</td><td>${serveRow}</td><td>${decl("a")}</td></tr>
       <tr><td class="nn">${sw(BOXC[1])}${split ? "node-b · decode" : "node-b"}</td><td>${trainRow}</td><td>${decl("b")}</td></tr>${extRows}</tbody></table>
-    ${canAdd ? `<button class="glink xadd" data-xadd>＋ Add an external box</button>` : ""}
+    ${canAdd ? `<button class="sadd xadd" data-xadd>＋ Add an external box</button>` : ""}
     <div class="presets"><span class="label">Presets</span>${presets}</div>
     <div class="expect"><span class="label">Should</span><span>${esc(W.should)}</span><span class="label">Did</span><span>${did}</span><span></span><span>${gridLine}</span>${notes}</div>${grid}`;
 }
@@ -866,6 +889,10 @@ function paintArch(W, now) {
 // Right column: the diagram, by itself.
 function render() {
   if (!IDX || (st.mode === "check" && !PAIRS)) { $("#app").innerHTML = `<p class="lede">Loading the recordings…</p>`; return; }
+  // The spotlight (his pick, 2026-11-21): the first time step 2 opens in a visit, everything but the two panes that hold
+  // the check dims, and the page scrolls to them. Only a click on those panes lifts it; there is no timer.
+  if (st.mode === "check" && !st.spotSeen) { st.spotSeen = true; st.spot = true; setTimeout(() => { const p = $("[data-spot]"); if (!p) return; p.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => { const r = p.getBoundingClientRect(); if (r.top > innerHeight * 0.8) p.scrollIntoView({ block: "center" }); }, 900); }, 80); }   // smooth scrolling stalls in some embedded views
   const raw = st.mode === "raw", W = cur().W;
   const note = raw ? `<span class="stepnote">step 2</span>` : "";
   const cls = s => raw ? s.replace('class="pane"', 'class="pane later"') : s;
@@ -876,10 +903,11 @@ function render() {
       ${transport()}
       ${st.addOpen ? pane("Add your own GPUs", steps(), `<button class="btn quiet" data-act="add">✕</button>`) : ""}
       ${telePane()}
-      ${cls(pane("Declared workloads", `<div class="tl${raw ? " nolink" : ""}" id="tl"></div>` + (raw ? "" : `<details class="sacct" id="sacct"${st.sacctOpen ? " open" : ""}><summary>Slurm table as reported <span class="sub" id="sacctsub"></span></summary><pre id="sacctpre"></pre></details>`), note))}
-      ${cls(pane("Rules", `<div id="rules"></div>`, note))}
-      <details class="rnote"${st.noteOpen ? " open" : ""}><summary>Note on rules</summary><p>These simple thresholds told apart every workload I recorded, with wide margins. None of the workloads were trying to hide, so robustness is untested; but a wide margin is a good sign for a classifier that is robust enough in practice.</p></details>
+      ${cls(pane("Declared workloads", `<div class="tl${raw ? " nolink" : ""}" id="tl"></div>` + (raw ? "" : `<details class="sacct" id="sacct"${st.sacctOpen ? " open" : ""}><summary>Slurm table as reported <span class="sub" id="sacctsub"></span></summary><pre id="sacctpre"></pre></details>`), note, raw ? "" : " data-spot"))}
+      ${cls(pane("Rules", `<div id="rules"></div>`, note, raw ? "" : " data-spot"))}
+      <details class="rnote"${raw ? "" : " data-spot"}${st.noteOpen ? " open" : ""}><summary>Note on rules</summary><p>These simple thresholds told apart every workload I recorded, with wide margins. None of the workloads were trying to hide, so robustness is untested; but a wide margin is a good sign for a classifier that is robust enough in practice.</p></details>
     </div><aside class="side">${pane("What flows where", archSVG(W))}</aside></div>`;
+  $("#app").classList.toggle("spotlight", !!st.spot && st.mode === "check");
   bind(); paint();
 }
 function bind() {
@@ -892,7 +920,20 @@ function bind() {
   on("[data-sseg]", b => { st.seg = st.seg === b.dataset.sseg ? null : b.dataset.sseg; render(); });
   on("[data-sk]", b => { const [i, k] = b.dataset.sk.split(":"); sideSet(() => { if (st.side[+i].k !== k) st.side[+i] = k === "ext" ? newExt() : { k, pick: [...KINDS[k].cells[0].pick], shift: 0 }; }); });
   on("[data-addk]", b => { const k = b.dataset.addk, row = k === "ext" ? newExt() : { k, pick: [...KINDS[k].cells[0].pick], shift: 0 }; st.addMenu = false; if (row) sideSet(() => st.side.push(row)); });
-  on("[data-shift]", (b, e) => { const [i, d] = b.dataset.shift.split(":").map(Number), s = st.side[i]; s.shift = d ? (s.shift || 0) + d * (e.shiftKey ? 6 : 1) : 0; e.stopPropagation(); render(); });
+  document.querySelectorAll("[data-scrub]").forEach(c => {
+    const [kind, idx] = c.dataset.scrub.split(":"), obj = () => kind === "side" ? st.side[+idx] : st.pair.ext[+idx];
+    c.onpointerdown = e => { e.preventDefault(); e.stopPropagation();
+      const o = obj(), x0 = e.clientX, v0 = o.shift || 0; c.classList.add("drag"); document.body.classList.add("scrubbing");
+      const mv = ev => { o.shift = Math.round(v0 + (ev.clientX - x0) * (ev.shiftKey ? 10 : 1));
+        world();   // applies the limits (one clip length either way)
+        c.querySelector(".sv").innerHTML = `<i>⇆</i>${fmtShift(o.shift || 0)}`; c.classList.toggle("moved", !!o.shift);
+        const r = kind === "side" ? clipSpan(o) : (IDX.recs["x:" + o.rid] ? [o.shift || 0, IDX.recs["x:" + o.rid].n, IDX.recs["x:" + o.rid].n] : null);
+        const mb = c.querySelector(".mb"); if (mb) mb.outerHTML = spanBar(r);
+        paint(); };
+      const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); document.body.classList.remove("scrubbing"); render(); };
+      addEventListener("pointermove", mv); addEventListener("pointerup", up); };
+    c.ondblclick = e => { e.stopPropagation(); obj().shift = 0; render(); };
+  });
   on("[data-xhost]", b => { const [i, ...h] = b.dataset.xhost.split(":"), host = h.join(":"), s = st.side[+i], box = BOXES.boxes.find(x => x.host === host), m = BOXES.recordings.find(x => x.host === host);
     sideSet(() => { s.host = host; if (box) { s.mode = "live"; } else if (m) { s.mode = "rec"; s.rid = m.id; } }); });
   on("[data-xmode]", b => { const s = st.side[+b.dataset.xmode.split(":")[0]]; sideSet(() => { s.mode = "live"; }); });
@@ -930,7 +971,6 @@ function bind() {
     if (e) { st.pair.ext.push(e); st.now = 0; render(); } });
   on("[data-xrm]", b => { st.pair.ext.splice(+b.dataset.xrm, 1); st.now = 0; render(); });
   on("[data-xdecl]", b => { const [k, d] = b.dataset.xdecl.split(":"); st.pair.ext[+k].decl = d; render(); });
-  on("[data-xshift]", (b, e) => { const [k, d] = b.dataset.xshift.split(":").map(Number), x = st.pair.ext[k]; x.shift = d ? (x.shift || 0) + d * (e.shiftKey ? 6 : 1) : 0; render(); });
   on("[data-decl]", b => { const [n, d] = b.dataset.decl.split(":"); st.pair["d" + n] = d; st.now = 0; st.paused = false; render(); });
   on("[data-preset]", b => { const [d, sv] = b.dataset.preset.split(":"), P = st.pair; P.da = d[0]; P.db = d[1];
     P.serve = sv === "split" ? "split" : (P.serve === "split" ? P.lastServe : P.serve); st.now = 0; st.paused = false; render(); });
@@ -1034,7 +1074,8 @@ function paintTL(el, W, now) {
     el._hits = []; el._geo = null; el.firstChild.innerHTML = svg(Wd, H0, q); showTip(el); return;
   }
   let y = 14, top = "", s = `<defs><pattern id="${el.id}-vh" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-    <line x1="0" y1="0" x2="0" y2="7" stroke="${RED}" stroke-opacity="0.5" stroke-width="1.2"/></pattern></defs>`;   // room above each lane for a broken rule's name
+    <line x1="0" y1="0" x2="0" y2="7" stroke="${RED}" stroke-opacity="0.5" stroke-width="1.2"/></pattern>
+    <pattern id="${el.id}-nr" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="${css("--surface")}"/><line x1="0" y1="0" x2="0" y2="6" stroke="${css("--grid")}" stroke-width="2"/></pattern></defs>`;   // room above each lane for a broken rule's name
   if (!lanes.length) { s += `<text x="${(L + R) / 2}" y="${y + 34}" text-anchor="middle" font-size="12" fill="${css("--muted")}">no node is streaming</text>`; y += LANE + GAP; }
   for (const ln of lanes) {
     const y0 = y, yv = w => y0 + LANE - Math.min(w, YMAX) / YMAX * LANE, inLane = k => { const [n, q] = k.split(":").map(Number); return n === ln.node && q >= ln.g[0] && q <= ln.g[1]; };
@@ -1059,6 +1100,12 @@ function paintTL(el, W, now) {
         jv.filter(v => activeV(v, now)).map(v => `<br><span class="bad">${RTITLE[v.rule]} broken for ${dur(now - v.a)}</span><br><span class="m">${esc(textV(v, now))}</span>`).join("") +
         (was ? `<br><span class="m">a rule broke and held again ${was} time${was > 1 ? "s" : ""} before now</span>` : "") });
     }
+    // slid past either end of its recording: a hatched grey band, so the zero line doesn't read as an idle GPU
+    { const nd = W.nodes[ln.node], step = d1 / 300; let a = null;
+      for (let t = 0; t <= now + step; t += step) { const out = t <= now && notRec(nd, t);
+        if (out && a == null) a = t;
+        if (!out && a != null) { const w = Math.max(x(Math.min(t, now)) - x(a), 1);
+          s += `<rect x="${x(a)}" y="${y0}" width="${w}" height="${LANE}" fill="url(#${el.id}-nr)"/>` + (w > 80 ? `<text x="${x(a) + 6}" y="${y0 + LANE / 2 + 4}" font-size="11" fill="${css("--muted")}">not recorded</text>` : ""); a = null; } } }
     // measured power: a very light line for every GPU, and the lane's mean in dark on top
     const ts = [], per = []; for (let k = ln.g[0]; k <= ln.g[1]; k++) per.push([]);
     for (let t = 0; t <= now; t += d1 / 200) { ts.push(t); per.forEach((a, i) => a.push(metric(W, ln.node, ln.g[0] + i, t, "power"))); }
@@ -1137,15 +1184,6 @@ function ruleDetail(W, now, k, act) {
   const anyJudged = W.nodes.some((_, ni) => I.judged(W, ni, now));
   return { q: `<span class="rq">${esc(I.q(W))}</span> <span class="rm">${I.on}</span>`, now: nodes + (anyJudged ? "" : `<span class="off">${I.none}</span>`), graph: ruleGraph(W, now, I) };
 }
-// The rule engine names jobs ("Job 4202: …"); the Rules pane names the node instead (his ask, 2026-11-12).
-const nodesOfV = (W, v) => [...new Set(v.gpus.map(g => +String(g).split(":")[0]))].map(i => W.nodes[i] && W.nodes[i].name.split(" ")[0]).filter(Boolean).join(" + ");
-function ruleText(W, v, now) {
-  const t = textV(v, now), n = nodesOfV(W, v); let m;
-  if (!n) return t;
-  if ((m = t.match(/^Job \d+: (.*)$/))) return `${n}: ${m[1]}`;
-  if ((m = t.match(/^Job \d+ sits on one node and sends ([\d.]+) GB\/s to other nodes/))) return `${n}: sends ${Math.round(+m[1] * 1000)} MB/s to other nodes`;
-  return `${n}: ${t}`;
-}
 // The rows are built once and then only their text is updated, 5× a second. (Rebuilding the whole pane every paint
 // dropped clicks whose press and release fell either side of a rebuild: TODO "clicking a rule is unreliable".)
 const setT = (e, v) => { if (e && e.textContent !== v) e.textContent = v; };
@@ -1163,10 +1201,11 @@ function paintRules(el, W, now) {
   }
   for (const [k, , , t] of RULES) {
     const item = el.querySelector(`[data-ritem="${k}"]`); if (!item) continue;
-    const act = W.viol.filter(q => q.rule === k && activeV(q, now)), v = act[0], past = W.viol.filter(q => q.rule === k && q.b <= now).length;
-    const r = W.raw ? { st: "wait", pill: "not checked", text: t } : now < 30 ? { st: "wait", pill: "warming up", text: "Needs 30 s of data first" }
-            : v ? { st: "bad", pill: `broken ${dur(now - v.a)}`, text: act.map(q => ruleText(W, q, now)).join(" · ") }
-            : { st: "ok", pill: "holding", text: t + (past ? ` (broke ${past} time${past > 1 ? "s" : ""} earlier in this clip)` : "") };
+    const act = W.viol.filter(q => q.rule === k && activeV(q, now)), v = act[0];
+    // the one-liner stays the rule's own sentence in every state (his ask, 2026-11-21); the pill says the state, and
+    // the numbers behind a break are in the row's details and the timeline's hover card
+    const r = W.raw ? { st: "wait", pill: "not checked", text: t } : now < 30 ? { st: "wait", pill: "warming up", text: t }
+            : v ? { st: "bad", pill: `broken ${dur(now - v.a)}`, text: t } : { st: "ok", pill: "holding", text: t };
     item.querySelector(".dot").style.background = css({ ok: "--good", bad: "--crit", wait: "--axis" }[r.st]);
     setT(item.querySelector(".rtext"), r.text);
     const pill = item.querySelector(".pill"); setT(pill, r.pill); pill.className = `pill ${r.st}`;
@@ -1218,6 +1257,11 @@ setInterval(() => {
   paint();
 }, 200);
 addEventListener("resize", paint);
+// While it's up, a click elsewhere on the page does nothing (the dimmed parts also ignore the pointer); a click on the
+// lit panes lifts it and does nothing else.
+$("#app").addEventListener("click", e => { if (!st.spot || st.mode !== "check") return;
+  e.stopPropagation(); e.preventDefault();
+  if (e.target.closest("[data-spot]")) { st.spot = false; $("#app").classList.remove("spotlight"); } }, true);
 render();
 fetch(DATA + "index.json").then(r => r.json()).then(d => { IDX = d; regRecs(); render(); });
 fetch(DATA + "pairs.json").then(r => r.json()).then(d => { PAIRS = d; render(); });

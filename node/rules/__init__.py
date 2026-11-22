@@ -1,8 +1,8 @@
 """The rules: one file each, plus this orchestrator.
 
-    undeclared_load.py    1. No undeclared workloads: no busy GPU outside a declared job
-    training_shaped.py    2. No hidden training: a job declared inference does not look like training
-    boundary_traffic.py   3. No cross-partition traffic: separate jobs do not send bulk data to each other
+    undeclared_load.py    1. Undeclared workloads: no busy GPU outside a declared job
+    training_shaped.py    2. Hidden training: a job declared inference does not look like training
+    boundary_traffic.py   3. Cross-partition traffic: separate jobs do not send bulk data to each other
 
 Every rule file has the same shape: NAME (the code's name), TITLE (the readable one), TEXT (one sentence for the page), its thresholds, and
 check(window), which returns a list of hits {rule, gpus, jobs, detail}.

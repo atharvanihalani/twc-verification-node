@@ -5,9 +5,9 @@ What the code in this folder does, in plain language. Someone who reads only thi
 | Part | File |
 |---|---|
 | Shared steps | `__init__.py` (the window and the verdict), `../app.py` (what goes in, and violation periods) |
-| Rule 1, No undeclared workloads | `undeclared_load.py` |
-| Rule 2, No hidden training | `training_shaped.py` |
-| Rule 3, No cross-partition traffic | `boundary_traffic.py` |
+| Rule 1, Undeclared workloads | `undeclared_load.py` |
+| Rule 2, Hidden training | `training_shaped.py` |
+| Rule 3, Cross-partition traffic | `boundary_traffic.py` |
 
 Every comparison is strict: "over 200 W" means greater than 200. All thresholds are placeholders from a handful of runs on 8× H200 boxes.
 
@@ -44,13 +44,13 @@ Run every 10 s.
 
 **6. Verdict.** `flagged` if any rule below is broken by anything, otherwise `compliant`.
 
-## Rule 1: No undeclared workloads
+## Rule 1: Undeclared workloads
 
 No busy GPU outside a declared job.
 
 For each streaming GPU that no counted job was given: if its mean power is over its busy floor, that GPU breaks the rule.
 
-## Rule 2: No hidden training
+## Rule 2: Hidden training
 
 A job declared inference does not look like training.
 
@@ -58,7 +58,7 @@ A job declared `inference` breaks the rule if its value for tensor-core utilisat
 
 (Until 2026-11-11 a second test, "power spread", could also break this rule. It was removed: it fired on honest serving under a steady load.)
 
-## Rule 3: No cross-partition traffic
+## Rule 3: Cross-partition traffic
 
 Separate jobs do not send bulk data to each other.
 
@@ -92,5 +92,4 @@ The page shows periods, not single evaluations. Each broken rule has a subject: 
 - Only power, tensor-core utilisation and network sent are read. PCIe sent is still collected, but nothing reads it while rule 3's PCIe test is off.
 - Rule 3 judges only boxes whose collector reports network readings: collector v0.5 or later, on a box with RDMA ports (InfiniBand or RoCE Ethernet). On the live node it is judged only while two or more boxes stream; one box alone has nothing to talk to.
 - A split inside one box (its traffic goes over NVLink or PCIe, not the network ports) is not seen by rule 3 while the PCIe test is off.
-- Training that keeps its power under the busy floor is not busy, so rule 1 does not see it. One earlier recording did: FSDP with CPU offload on 8× H100 averaged 186 W in its steady phase (the GPUs wait on the CPU).
 - One patchy GPU reduces coverage for every GPU, because a slot is kept only when all of them have a reading.

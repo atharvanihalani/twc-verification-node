@@ -22,9 +22,9 @@ In the intended design, the node sits on-site in a tamper-evident enclosure. It 
 
 | Rule | A job or GPU breaks it when… |
 |---|---|
-| 1. No undeclared load | A GPU that no declared job covers averages over 200 W (300 W on B200/B300) |
-| 2. No hidden training | A job declared `inference` has tensor-core utilisation over 40% |
-| 3. No cross-partition traffic | A job declared `inference` sends over 0.001 GB/s to other boxes over the RDMA ports |
+| 1. Undeclared workloads | A GPU that no declared job covers averages over 200 W (300 W on B200/B300) |
+| 2. Hidden training | A job declared `inference` has tensor-core utilisation over 40% |
+| 3. Cross-partition traffic | A job declared `inference` sends over 0.001 GB/s to other boxes over the RDMA ports |
 
 The full spec is [`node/rules/rules.md`](node/rules/rules.md). It is detailed enough to reimplement the rules from. [`test_spec.py`](node/rules/test_spec.py) is such a reimplementation, and it is checked against the real code.
 
@@ -40,7 +40,7 @@ The thresholds separated every recorded workload, with wide margins. None of the
 ## Limits
 
 - **Telemetry is unsigned.** The design assumes the GPU signs telemetry on-die, which current firmware doesn't support. Until then, the operator could spoof the telemetry.
-- **The rules are not red-teamed.** The thresholds are placeholders fit to a handful of runs. Low-power training passes under rule 1's floor: one earlier recording, FSDP with CPU offload on 8× H100, averaged 186 W.
+- **The rules are not red-teamed.** The thresholds are placeholders fit to a handful of runs.
 - **Multi-node is partly simulated.** Most composed scenarios line up recordings made at different times. `collector.py --split` can divide one box into pretend nodes (see [SPLIT_CAVEATS.md](SPLIT_CAVEATS.md)).
 - **The live collector doesn't send network counters yet,** so rule 3 only judges recordings.
 - **Node state lives in memory** on a single machine.

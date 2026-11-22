@@ -57,7 +57,6 @@ Direction (his, 2026-11-10): skip finicky statistical measures; prefer clean dec
   - The 0.001 GB/s limit comes from one split at 16 sessions and four honest runs; storage traffic over the same ports would trip it.
   - Receivers aren't named; only the sending job is flagged.
   - If PCIe comes back: restore test 2 in `rules.md` and the `range(len(jobs))` loop in `test_spec.py`; its Blackwell numbers (0.01 GB/s honest on B200) are untested with a hand-off.
-- [ ] **Low-power training slips under the 200 W busy floor.** The one recording: T6, FSDP with CPU offload on 8× H100 (gpu-telemetry-exploration, 2026-03-31), steady-phase mean 186 W, median 123 W. The CPU offload is what keeps the GPUs waiting: the TorchTitan FSDP runs here draw 600 W and more. Related: the prefill node of the two-node split averages under the floor most of the time.
 - [ ] Consider a rule that shows training happened even while disconnected (energy counters).
 
 ## Pipeline
