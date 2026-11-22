@@ -85,7 +85,7 @@ app.add_middleware(GZipMiddleware, minimum_size=20_000)
 # Password only, no username. Browsers get a login page that sets a cookie;
 # the CLIs send HTTP basic auth (username ignored). /healthz and /login are open.
 AUTH_COOKIE = "twc_auth"
-OPEN_PATHS = {"/healthz", "/login"}
+OPEN_PATHS = {"/healthz", "/login", "/api/site"}
 
 
 def cookie_token():
@@ -608,6 +608,12 @@ def rec_convert(rows):
     body = {"n": n, "s": {k: [fill(sec[k][g], REC_SCALE[k]) for g in range(G if k != "net_tx" else 1)] for k in REC_SCALE}}
     fine_body = {"n": n, "hz": 10, "s": {"power": [fill(fine[g], 1) for g in range(G)]}}
     return body, fine_body, n, G
+
+
+@app.get("/api/site")
+def api_site():
+    """Whether the site asks for a password, so the pages can leave the password step out of their one-liners."""
+    return {"password": bool(SITE_PASSWORD)}
 
 
 @app.get("/api/boxes")

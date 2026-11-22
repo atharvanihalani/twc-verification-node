@@ -129,7 +129,7 @@
   .dtab .sseg .pop button small { color: var(--muted); font-size: 11.5px; margin-left: auto; padding-left: 14px; }
   /* External box rows, offsets and the live bar (2026-11-21) */
   .scrubchip { display: inline-grid; justify-items: center; gap: 2px; margin-left: 10px; padding: 1px 8px 2px; border: 1px solid var(--grid); border-radius: 6px; cursor: ew-resize; touch-action: none; user-select: none; }
-  .scrubchip .sv { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); white-space: nowrap; } .scrubchip .sv i { font-style: normal; color: var(--axis); margin-right: 4px; }
+  .scrubchip .sv { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); white-space: nowrap; }
   .scrubchip.moved .sv { color: var(--ink); font-weight: 600; }
   .scrubchip:hover, .scrubchip.drag { border-color: var(--axis); }
   .scrubchip .mb { display: block; width: 56px; height: 5px; } .scrubchip .mb .t { fill: var(--grid); } .scrubchip .mb .w { fill: var(--axis); }
@@ -720,8 +720,8 @@ function clipSpan(s) {   // [clip start, clip length, recording length], seconds
 }
 const spanBar = sp => { if (!sp) return ""; const [a, len, n] = sp, x0 = Math.max(0, Math.min(1, a / n)), x1 = Math.max(0, Math.min(1, (a + len) / n));
   return `<svg class="mb" viewBox="0 0 70 6" preserveAspectRatio="none"><rect x="0" y="2" width="70" height="2" class="t"/><rect class="w" x="${(x0 * 70).toFixed(1)}" y="0" width="${Math.max(2, (x1 - x0) * 70).toFixed(1)}" height="6"/></svg>`; };
-const scrubChip = (key, v, sp, color) => `<span class="scrubchip${v ? " moved" : ""}" data-scrub="${key}" style="--rc:${color}" title="Hold and drag sideways to slide this clip within its recording: 1 px = 1 s, with Shift 10 s. Double-click to reset.">` +
-  `<span class="sv"><i>⇆</i>${fmtShift(v)}</span>${spanBar(sp)}</span>`;
+const scrubChip = (key, v, sp, color) => `<span class="scrubchip${v ? " moved" : ""}" data-scrub="${key}" style="--rc:${color}" title="Hold and drag sideways to slide this clip within its recording: 1 px = 1 s, with Shift 10 s. It snaps to 0 on the way past; double-click resets.">` +
+  `<span class="sv">${fmtShift(v)}</span>${spanBar(sp)}</span>`;
 function sideRows() {
   let li = 0; const total = sideNodes(st.side), C = window.BOX_COLORS || ["#2a78d6", "#eb6834", "#1baf7a", "#7f5af0"];
   const extOK = BOXES.boxes.length > 0 || BOXES.recordings.length > 0;
@@ -838,7 +838,7 @@ function steps() {
     : `<b><span class="pulse"></span>Listening for your box…</b><p>It appears here by itself once the collector starts.</p>`;
   return `<div class="steps">
     <div class="step"><span class="n">1</span><div><b>Rent an 8× H200 or 8× B200 box</b><p>The only GPUs tested so far. Allow about an hour the first time; most of it is downloads.</p></div></div>
-    <div class="step"><span class="n">2</span><div><b>Run this on the box</b><pre>curl -fsSu :$P https://twc-verification-node.fly.dev/setup.py -o /tmp/setup.py &amp;&amp; python3 /tmp/setup.py</pre>
+    <div class="step"><span class="n">2</span><div><b>Run this on the box</b><pre>curl -fsS ${location.origin}/setup.py -o /tmp/setup.py &amp;&amp; python3 /tmp/setup.py --node ${location.origin}</pre>
       <p><a href="/walkthrough">Full walkthrough</a> · code: ${ghA("setup.py")} · ${ghA("collector.py")}</p></div></div>
     <div class="step"><span class="n">3</span><div>${s3}</div></div></div>`;
 }
@@ -924,9 +924,10 @@ function bind() {
     const [kind, idx] = c.dataset.scrub.split(":"), obj = () => kind === "side" ? st.side[+idx] : st.pair.ext[+idx];
     c.onpointerdown = e => { e.preventDefault(); e.stopPropagation();
       const o = obj(), x0 = e.clientX, v0 = o.shift || 0; c.classList.add("drag"); document.body.classList.add("scrubbing");
-      const mv = ev => { o.shift = Math.round(v0 + (ev.clientX - x0) * (ev.shiftKey ? 10 : 1));
+      const mv = ev => { const k = ev.shiftKey ? 10 : 1, v = Math.round(v0 + (ev.clientX - x0) * k);
+        o.shift = Math.abs(v) <= 5 * k ? 0 : v;   // snaps to 0 within 5 px of it (his ask, 2026-11-21)
         world();   // applies the limits (one clip length either way)
-        c.querySelector(".sv").innerHTML = `<i>⇆</i>${fmtShift(o.shift || 0)}`; c.classList.toggle("moved", !!o.shift);
+        c.querySelector(".sv").textContent = fmtShift(o.shift || 0); c.classList.toggle("moved", !!o.shift);
         const r = kind === "side" ? clipSpan(o) : (IDX.recs["x:" + o.rid] ? [o.shift || 0, IDX.recs["x:" + o.rid].n, IDX.recs["x:" + o.rid].n] : null);
         const mb = c.querySelector(".mb"); if (mb) mb.outerHTML = spanBar(r);
         paint(); };

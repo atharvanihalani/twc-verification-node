@@ -71,7 +71,7 @@
       <li>TorchTitan for training workloads</li>
     </ul>
     <p>The script is the same on every box. It also offers an optional Hugging Face login; a read-only token is enough. Everything it prints is kept in <span class="mono">~/.twc-setup/logs/setup.log</span>.</p>
-    <p>Password: the same one you used to log in to this site.</p>
+    <p id="pwline" style="display:none">Password: the same one you used to log in to this site.</p>
     <div class="cmd card"><pre class="mono" id="install"></pre><button data-copy="install">Copy</button></div>
     <div class="status" id="boxstatus"><span class="dot"></span><span id="boxtext">Waiting for a box to start streaming…</span></div>
     <div class="label" style="margin-top:8px">Pick your GPUs</div>
@@ -138,8 +138,10 @@
 <script>
   const local = ["localhost", "127.0.0.1"].includes(location.hostname);
   const node = local ? "http://127.0.0.1:18999" : location.origin;
+  // With no site password (2026-11-21), the one-liners just download and run. With one, they ask for it once.
   // A wrong password gets a redirect with an empty body, which curl saves without complaint; hence the -s check.
-  const fetchAndRun = (file, args) => `{
+  let SITE_PW = false;
+  const fetchAndRun = (file, args) => !SITE_PW ? `curl -fsS ${node}/${file} -o /tmp/${file} && python3 /tmp/${file} ${args}` : `{
   read -rsp "TWC password: " P; echo
 
   curl -fsSu ":$P" ${node}/${file} -o /tmp/${file} &&
@@ -376,9 +378,10 @@ nohup ${PY} ~/.twc-setup/pd_proxy.py --host 127.0.0.1 --port 8192 \\
   --wrap '${body}'`;
   }
 
-  setCmd("install", fetchAndRun("setup.py", `--node ${node}`));
-  setCmd("stop", STOP.join("\n"));
-  setCmd("sched", fetchAndRun("slurm_reporter.py", `install --install-slurm --node ${node}`));
+  const oneLiners = () => { setCmd("install", fetchAndRun("setup.py", `--node ${node}`));
+    setCmd("sched", fetchAndRun("slurm_reporter.py", `install --install-slurm --node ${node}`)); $("pwline").style.display = SITE_PW ? "" : "none"; };
+  oneLiners(); setCmd("stop", STOP.join("\n"));
+  fetch("/api/site").then(r => r.json()).then(d => { SITE_PW = !!d.password; oneLiners(); }).catch(() => {});
   render();
   document.querySelectorAll("[data-copy]").forEach(b => b.onclick = e => {
     const t = $(b.dataset.copy); navigator.clipboard.writeText(t.value ?? t.textContent);

@@ -19,7 +19,7 @@ Everything this script prints also goes to ~/.twc-setup/logs/setup.log.
 
     TWC_PASSWORD=... python3 setup.py --node https://twc-verification-node.fly.dev
 
-Asks for the password if TWC_PASSWORD isn't set. Safe to rerun. Standard library only.
+Asks for the site password only if the node wants one (TWC_PASSWORD skips the question). Safe to rerun. Standard library only.
 
 It needs only python3 (3.11 or newer), git and an NVIDIA driver. It does NOT need pip or the
 python3-venv package: it fetches its own copy of uv (from PyPI, checksum-verified) and uses that to
@@ -360,8 +360,14 @@ def fetch_collector(node, password):
 
 def setup_collector(a):
     log("--- collector ---")
-    password = os.environ.get("TWC_PASSWORD") or getpass.getpass("TWC password: ")
-    body = fetch_collector(a.node, password)
+    password = os.environ.get("TWC_PASSWORD", "")
+    try:   # most nodes have no password: try without one first, and ask only if the node turns us away
+        body = fetch_collector(a.node, password)
+    except StepFailed:
+        if password:
+            raise
+        password = getpass.getpass("TWC password: ")
+        body = fetch_collector(a.node, password)
     # Give the collector a Python that already has the NVIDIA library, so it needn't install anything itself.
     py = make_venv(COLLECTOR_VENV, own_python=False)  # the system Python is fine here: nothing gets compiled
     uv_install(py, "-q", "nvidia-ml-py")

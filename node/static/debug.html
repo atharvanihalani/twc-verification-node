@@ -78,11 +78,14 @@ python3 ~/.twc-collector/collector.py uninstall   # stop and remove</pre>
   const local = ["localhost", "127.0.0.1"].includes(location.hostname);
   const fetchUrl = local ? "http://127.0.0.1:18999" : location.origin;
   // A wrong password gets a redirect with an empty body, which curl saves without complaint; hence the -s check.
-  const fetchAndRun = (file, args) => `read -rsp "TWC password: " P; echo; curl -fsSu ":$P" ${fetchUrl}/${file} -o /tmp/${file} && if [ -s /tmp/${file} ]; then TWC_PASSWORD="$P" python3 /tmp/${file} ${args}; else echo "Couldn't download ${file}: wrong password?"; fi`;
+  let SITE_PW = false;   // no site password (2026-11-21): the one-liners just download and run
+  const fetchAndRun = (file, args) => !SITE_PW ? `curl -fsS ${fetchUrl}/${file} -o /tmp/${file} && python3 /tmp/${file} ${args}`
+    : `read -rsp "TWC password: " P; echo; curl -fsSu ":$P" ${fetchUrl}/${file} -o /tmp/${file} && if [ -s /tmp/${file} ]; then TWC_PASSWORD="$P" python3 /tmp/${file} ${args}; else echo "Couldn't download ${file}: wrong password?"; fi`;
   const installArgs = `install --node ${fetchUrl}`;
-  document.getElementById("oneliner").textContent = fetchAndRun("collector.py", installArgs);
-  document.getElementById("oneliner-split").textContent = fetchAndRun("collector.py", installArgs + " --split ask");
-  document.getElementById("oneliner-slurm").textContent = fetchAndRun("slurm_reporter.py", installArgs);
+  const oneLiners = () => { document.getElementById("oneliner").textContent = fetchAndRun("collector.py", installArgs);
+    document.getElementById("oneliner-split").textContent = fetchAndRun("collector.py", installArgs + " --split ask");
+    document.getElementById("oneliner-slurm").textContent = fetchAndRun("slurm_reporter.py", installArgs); };
+  oneLiners(); fetch("/api/site").then(r => r.json()).then(d => { SITE_PW = !!d.password; oneLiners(); }).catch(() => {});
   document.getElementById("tunnelnote").style.display = local ? "block" : "none";
   document.querySelectorAll("[data-copy]").forEach(b => b.onclick = e => { navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent); e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy", 1200); });
   // ---- Slurm jobs: the declarations, straight from /api/slurm (polled with the live data, 1 s)
