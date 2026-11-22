@@ -54,6 +54,8 @@
   ul.tight li { margin: 3px 0; }
   dd ul.tight { padding-left: 16px; }
   .sub2 { color: var(--muted); font-size: 12.5px; }
+  .busy { margin: 8px 0 0; padding: 8px 12px; border-left: 3px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); font-size: 13.5px; }
+  .busy .cmd { margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -74,6 +76,9 @@
     <p id="pwline" style="display:none">Password: the same one you used to log in to this site.</p>
     <div class="cmd card"><pre class="mono" id="install"></pre><button data-copy="install">Copy</button></div>
     <div class="status" id="boxstatus"><span class="dot"></span><span id="boxtext">Waiting for a box to start streaming…</span></div>
+    <div id="busy" class="busy" style="display:none"><b>Something is already using your GPUs</b> (<span id="busymem"></span>), and the workloads below won't fit beside it.
+      Setup warns about this too. On vast's vLLM image it's the image's own server; stop it with:
+      <div class="cmd card"><pre class="mono" id="freecmd">supervisorctl stop vllm; pkill -9 -f "[V]LLM::"</pre><button data-copy="freecmd">Copy</button></div></div>
     <div class="label" style="margin-top:8px">Pick your GPUs</div>
     <div class="pills" id="gpu"></div>
   </section>
@@ -224,12 +229,15 @@ done; echo "the server on port ${port} is ready"`;
   const AXINSTALL = `# First time only: install AgentX in its own environment (about a minute)
 UV=$(command -v uv || echo ~/.twc-setup/bin/uv)
 [ -x ~/.twc-setup/agentx-venv/bin/agentx ] || { $UV venv -q ~/.twc-setup/agentx-venv && $UV pip install -q -p ~/.twc-setup/agentx-venv agentx-harness==1.0.12; }`;
-  const agentx = (port, conc, seed = 42, out = "agentx") => `~/.twc-setup/agentx-venv/bin/agentx profile --url http://localhost:${port} \\
+  // In the background (found on a first run, 2026-11-21: in the foreground it holds the terminal silent for ~25 minutes)
+  const agentx = (port, conc, seed = 42, out = "agentx") => `nohup ~/.twc-setup/agentx-venv/bin/agentx profile --url http://localhost:${port} \\
   --endpoint /v1/chat/completions --model ${box().model} \\
   --tokenizer ${box().model} --tokenizer-trust-remote-code --streaming \\
   --concurrency ${conc} --public-dataset semianalysis-cc-traces-weka-062126 \\
   --benchmark-duration 900 --benchmark-grace-period 30 --random-seed ${seed} \\
-  --output-artifact-dir ~/${out} > ~/${out}.log 2>&1`;
+  --output-artifact-dir ~/${out} > ~/${out}.log 2>&1 &
+# It runs in the background for about 25 minutes: start-up, cache warm-up, then 15 measured.
+# Watch it on the Replay demo. Its own progress: tail -f ~/${out}.log (Ctrl-C stops the tail, not AgentX)`;
   const AX_TRY = ["--concurrency: sessions at once (the recordings used 4, 16 and 64)",
                   "Expect about 10 minutes of start-up and cache warm-up before the measured 15 minutes; progress is in ~/agentx.log"];
   const sendLoad = (port, conc, rate) => state.load === "agentx" ? [AXINSTALL, "# Send it recorded coding-agent sessions\n" + agentx(port, conc)]
@@ -253,7 +261,7 @@ UV=$(command -v uv || echo ~/.twc-setup/bin/uv)
         mock: tested("ep8") },
       { id: "pods", label: "Two pods", what: `Two independent copies of ${b.name}, 4 GPUs each (TP4 × 2).`,
         cmd: [setup(), first + "# Start one server per half\n" + serve("tp4", 8101, "0,1,2,3"), serve("tp4", 8102, "4,5,6,7"), "# Wait until both are ready: the download if needed, then loading into the GPUs\n" + ready(8101) + "\n" + ready(8102),
-              ...(state.load === "agentx" ? [AXINSTALL, "# Send each one recorded coding-agent sessions, 8 at a time\n" + agentx(8101, 8, 42, "agentx-1") + " &", agentx(8102, 8, 43, "agentx-2") + " &"]
+              ...(state.load === "agentx" ? [AXINSTALL, "# Send each one recorded coding-agent sessions, 8 at a time\n" + agentx(8101, 8, 42, "agentx-1"), agentx(8102, 8, 43, "agentx-2")]
                                           : [TRACE, "# Send each one bursty load\n" + bench(8101, 1) + " &", bench(8102, 1) + " &"])],
         see: ["Each half moves together", "The two halves don't"],
         tryit: ["Send one pod far more load", ...loadTry()],
@@ -283,7 +291,7 @@ TWC_BATCH=${TRAIN[state.gpu].batch} TWC_SEQ_LEN=8192 TWC_REMAT=default TWC_STEPS
               "TWC_REMAT=full: recompute activations. About 60% less memory, 10% slower, and a faint per-step rhythm appears"],
       mock: TRAIN[state.gpu].tag },
   ];
-  const STOP = ['scancel --user=$USER 2>/dev/null', 'pkill -f "[a]gentx profile"', 'pkill -f "[p]d_proxy"', 'pkill -f "[v]llm bench"', 'pkill -f "[v]llm serve"', 'pkill -9 -f "[V]LLM::"', 'pkill -f "[t]wc_workloads"', 'pkill -f "[t]orchtitan.train"'];
+  const STOP = ['scancel --user=$USER 2>/dev/null', 'pkill -f "[a]gentx profile"', 'pkill -f "^[a]iperf "', 'pkill -f "[p]d_proxy"', 'pkill -f "[v]llm bench"', 'pkill -f "[v]llm serve"', 'pkill -9 -f "[V]LLM::"', 'pkill -f "[t]wc_workloads"', 'pkill -f "[t]orchtitan.train"'];
 
   // ---- section 3. Every scenario uses whole 8-GPU nodes (his call, 2026-11-21: no 4+4 split).
   // A Slurm job. The script goes in on stdin, so the quotes inside it need no escaping.
@@ -388,12 +396,22 @@ nohup ${PY} ~/.twc-setup/pd_proxy.py --host 127.0.0.1 --port 8192 \\
     e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy", 1200);
   });
 
+  // our own workloads also fill the GPUs: once the reader has copied a workload or scenario command, stop warning
+  let ours = false;
+  document.querySelectorAll('[data-copy="wl-cmd"], [data-copy="sc-cmd"], [data-copy="x-cmd"]').forEach(b => b.addEventListener("click", () => { ours = true; }));
   // The box status line comes from the same 1 s poll as the Debug tab.
   TWCLive.subscribe(d => {
     const hosts = Object.keys(d);
     $("boxstatus").className = "status" + (hosts.length ? " on" : "");
     $("boxtext").textContent = hosts.length ? `Streaming from ${hosts.map(h => `${h} (${d[h].label})`).join(", ")}` : "Waiting for a box to start streaming…";
+    // Before any workload of ours runs, a GPU holding tens of GB means something else got there first (found on a
+    // first run, 2026-11-21: vast's vLLM image starts its own server on all 8 GPUs). Ours start on port 81xx.
+    const used = hosts.flatMap(h => Object.values(d[h].gpus || {}).map(g => (g.latest || {}).mem_used_gb).filter(v => v != null));
+    const busy = used.length && Math.min(...used) > 20 && !ours;
+    $("busy").style.display = busy ? "" : "none";
+    if (busy) $("busymem").textContent = `${Math.round(Math.min(...used))} GB or more in use on every GPU`;
   });
+
 </script>
 </body>
 </html>

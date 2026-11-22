@@ -652,6 +652,12 @@ def start_model_download(repo, guess_gb):
         old = json.loads(DOWNLOAD.read_text())
         if old.get("repo") == repo and pid_alive(old.get("pid")):
             return "already running from an earlier setup"
+        # a rerun after a finished download: say so, instead of "still downloading" (found on a rerun, 2026-11-21)
+        exit_file = Path(old.get("exit_file", HOME / "model-download.exit"))
+        folder = hub_dir() / ("models--" + repo.replace("/", "--"))
+        if (old.get("repo") == repo and exit_file.exists() and exit_file.read_text().strip() == "0"
+                and model_bytes(folder) >= 0.97 * total):
+            return "already downloaded"
     own = VENV / "bin" / "hf"
     hf = [str(own)] if own.exists() else [UV, "tool", "run", "-q", "--from", "huggingface_hub", "hf"]
     out, done = LOGS / "model-download.log", HOME / "model-download.exit"
@@ -850,7 +856,9 @@ def main():
         outcome, seconds = result[name]
         log(f"{name}: {outcome} ({took(seconds)})")
     log(f"Setup has finished and this terminal is free. A copy of everything above is in {SETUP_LOG}")
-    if downloading and downloading[1].startswith(("started", "already")):
+    if downloading and downloading[1] == "already downloaded":
+        log(f"The serving model is already downloaded ({downloading[0]}): inference commands will start without downloading.")
+    elif downloading and downloading[1].startswith(("started", "already running")):
         log(f"Still downloading in the background: {downloading[0]}, the model for the inference workloads.")
         log(f"  Check on it:  {PROGRESS_CMD}          (add --watch to keep it updating)")
         log(f"  Stop it:      {PROGRESS_CMD} --stop")
