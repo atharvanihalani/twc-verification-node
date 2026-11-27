@@ -49,7 +49,7 @@
   // up to MAX_BOXES boxes share the graphs; each keeps the colour of the slot the node gave it
   const MAX_BOXES = 8;   // = MAX_BOXES in node/app.py
   const BOX_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#7f5af0", "#d6a419", "#d6467e", "#2fb5c9", "#8a6d4a"];
-  const colorOf = h => BOX_COLORS[(h.slot || 0) % BOX_COLORS.length];
+  const colorOf = h => h.color || BOX_COLORS[(h.slot || 0) % BOX_COLORS.length];   // a page may set each node's colour (Replay: by workload)
   const alpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, "0");
   const hidden = new Set(JSON.parse(localStorage.getItem("twc-hidden-boxes") || "[]"));   // boxes switched off on the graphs
   const saveHidden = () => localStorage.setItem("twc-hidden-boxes", JSON.stringify([...hidden]));

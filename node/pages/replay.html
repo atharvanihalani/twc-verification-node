@@ -105,8 +105,8 @@
   .dtab .chain { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 1px; } .dtab .kk { font-weight: 600; padding: 0 6px 0 0; }
   .dtab .muted { color: var(--muted); font-size: 13px; }
   .dp { flex-wrap: nowrap; gap: 2px; } .dp button { font-size: 13px; padding: 2px 10px; }
-  .dp button.on.i { background: color-mix(in srgb, #2a78d6 14%, transparent); color: #2a78d6; }
-  .dp button.on.p { background: color-mix(in srgb, #3f8f5b 16%, transparent); color: #3f8f5b; }
+  .dp button.on.i { background: color-mix(in srgb, #2a78d6 14%, transparent); color: #1f63b8; }
+  .dp button.on.p { background: color-mix(in srgb, #eb6834 16%, transparent); color: #b84a18; }
   .presets { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 13px; margin: 2px 0 0 8px; }
   .presets .label { margin: 0 2px 0 0; color: var(--muted); font-size: 10.5px; letter-spacing: .07em; }
   .presets a { color: var(--s1); cursor: pointer; border-bottom: 1px dotted var(--s1); } .presets a.on { color: var(--ink); font-weight: 600; border-bottom-color: transparent; }
@@ -126,8 +126,8 @@
   .dtab .xrm:hover { color: var(--ink); }
   .xadd { display: block; margin: 0 0 6px; padding-left: 8px; }   /* same look as Side by side's "＋ Add a node" */
   .fromslurm { display: inline-grid; font-size: 13px; color: var(--ink2); } .fromslurm small { font-size: 11px; color: var(--muted); }
-  .dtag { font-size: 12.5px; padding: 1px 8px; } .dtag.i { color: #2a78d6; background: color-mix(in srgb, #2a78d6 12%, transparent); }
-  .dtag.p { color: #3f8f5b; background: color-mix(in srgb, #3f8f5b 14%, transparent); }
+  .dtag { font-size: 12.5px; padding: 1px 8px; } .dtag.i { color: #1f63b8; background: color-mix(in srgb, #2a78d6 12%, transparent); }
+  .dtag.p { color: #b84a18; background: color-mix(in srgb, #eb6834 14%, transparent); }
   .dtab .sseg .pop button small { color: var(--muted); font-size: 11.5px; margin-left: auto; padding-left: 14px; }
   /* External box rows, offsets and the live bar (2026-11-21) */
   .scrubchip { display: inline-grid; justify-items: center; gap: 2px; margin-left: 10px; padding: 1px 8px 2px; border: 1px solid var(--grid); border-radius: 6px; cursor: ew-resize; touch-action: none; user-select: none; }
@@ -296,6 +296,27 @@
   .arch .a-sched { fill: url(#a-hatch); stroke: var(--axis); }
   .arch .a-decl { color: var(--good); } .arch .a-decl .a-dots { stroke: var(--good); }
   .arch .a-decl text.lab { fill: color-mix(in srgb, var(--good) 75%, var(--ink)); }
+  /* the prover's box: an outline, no pink wash (his ask, 2026-11-27) */
+  .arch .a-prover { fill: none; stroke: var(--ink); stroke-dasharray: 3 4; opacity: .55; stroke-width: 1; }
+  /* a reader's own box is teal everywhere, its live markers too */
+  .livedot, .xdot, .xlive i { background: #0e9f94; } .xlive, .livebar .lv { color: #08665f; }
+
+  /* ---------- look B (the default; /replay?look=a turns it off): items 5-8 of 2026-11-27 ---------- */
+  html.look-b { --good: var(--ink2); }
+  .look-b .pill.ok { background: var(--grid); color: var(--ink2); }
+  .look-b .pgrid td.y { background: transparent; color: var(--ink2); }
+  .look-b :focus-visible { outline-color: var(--axis); }
+  .look-b .presets a { color: var(--ink2); border-bottom: 1px solid var(--axis); } .look-b .presets a.on { color: var(--ink); border-bottom-color: transparent; }
+  .look-b .glink { color: var(--ink2); text-decoration: underline; text-decoration-color: var(--axis); text-underline-offset: .2em; }
+  html:root.look-b .arch .a-sched { fill: var(--page); stroke: var(--ring); }
+  html:root.look-b .arch .a-host { fill: var(--surface); stroke: var(--ink); stroke-width: 1; }
+  html:root.look-b .arch .a-hl { stroke: var(--ring); }
+  html:root.look-b .arch .a-cl { font-size: 8.5px; }
+  html:root.look-b .arch .a-org { fill: var(--surface); stroke: var(--s1); }
+  html:root.look-b .arch .a-dots { stroke: var(--ink); }
+  html:root.look-b .arch .a-later:first-of-type .a-dots, .look-b .arch .a-decl .a-dots { stroke: var(--s1); }
+  html:root.look-b .arch .a-decl { color: var(--s1); } .look-b .arch .a-decl .a-line { stroke-dasharray: 4 3; }
+  html:root.look-b .arch .a-decl text.lab { fill: var(--s1); }
 </style>
 <script src="/static/theme/variant.js"></script>   <!-- design versions by URL prefix; see the file -->
 </head>
@@ -478,7 +499,7 @@ function phaseOf(n, t) {
 function phaseHTML(W, t) {
   const names = W.nodes.map(n => phaseOf(n, t));
   const by = new Map(); names.forEach((q, i) => { if (q) (by.get(q) || by.set(q, []).get(q)).push(i); });
-  return [...by].map(([q, ix]) => `<span>${ix.map(i => `<span class="pd" style="background:${BOXC[i % BOXC.length]}"></span>`).join("")}${esc(q)}</span>`).join("");
+  return [...by].map(([q, ix]) => `<span>${ix.map(i => `<span class="pd" style="background:${colOf(W, i)}"></span>`).join("")}${esc(q)}</span>`).join("");
 }
 function phaseAt(W, t) {
   const names = W.nodes.map(n => phaseOf(n, t));
@@ -494,7 +515,7 @@ function teleWhole(W) {
   if (_zt.sig === sig) return _zt.out;
   const out = {}, N = Math.min(400, W.dur), step = W.dur / N;
   W.nodes.forEach((n, ni) => {
-    const h = { slot: ni, label: nodeLabel(W, n), replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} }, r = REC[n.rec];
+    const h = { slot: ni, color: colOf(W, ni), label: nodeLabel(W, n), replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} }, r = REC[n.rec];
     for (const k of KEYS) { h.mean[k] = [];
       for (let g = 0; g < n.gpus; g++) { (h.gpus[g] = h.gpus[g] || {})[k] = []; }
       for (let i = 0; i <= N; i++) { let a = 0;
@@ -509,7 +530,7 @@ function teleWhole(W) {
 function teleData(list) {
   const out = {}; let slot = 0;
   for (const { W, t } of list) W.nodes.forEach((n, ni) => {
-    const h = { slot: slot++, label: nodeLabel(W, n), replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} };
+    const h = { slot: slot++, color: colOf(W, ni), label: nodeLabel(W, n), replay: "", batches: 1, age_s: 0, gpus: {}, mean: {} };
     for (const k of KEYS) h.mean[k] = [];
     for (let g = 0; g < n.gpus; g++) { h.gpus[g] = {}; for (const k of KEYS) h.gpus[g][k] = []; }
     const hz = REC10[n.rec] || n.live ? 10 : 1, t1 = Math.floor(t * hz) / hz;   // one point per stored reading, on its own time
@@ -537,7 +558,24 @@ const MOCK_STRIPS = [
 MOCK_STRIPS.forEach(st => st.gpuColor = washOf);
 const TELE_OPTS = { compact: true, strips: MOCK_STRIPS, connectHref: "/walkthrough" };
 
-const TYPE = { inference: "#2a78d6", pretraining: "#3f8f5b" }, RED = "#d03b3b", NONE = "#888780";
+// Colour = what a node runs (his rule, 2026-11-27): inference blue, pretraining orange, in up to four shades each (Side by
+// side shows at most four nodes), in the order the nodes appear. A reader's own box ("Add your GPUs") is teal: the site
+// can't know what it really runs, only what its Slurm declares, so its trace takes no workload colour. Declarations are
+// always the first blue or orange, so a lie shows as a colour clash (an orange trace under a blue declaration).
+const SHADES = { inf: ["#2a78d6", "#16479a", "#86b6f1", "#4f62d3"], pre: ["#eb6834", "#a8400f", "#f4a273", "#d9921a"],
+                 byo: ["#0e9f94", "#08665f", "#5fcfc3", "#2f8f7a"], none: ["#888780"] };
+const TYPE = { inference: SHADES.inf[0], pretraining: SHADES.pre[0] }, RED = "#d03b3b", NONE = "#888780";
+const TYPE_TEXT = { inference: "#1f63b8", pretraining: "#b84a18" };   // the same two, dark enough to read as text
+const kindOfNode = n => !n ? "none" : n.live || String(n.rec || "").startsWith("x:") ? "byo" : !n.rec ? "none" : n.rec[0] === "p" ? "pre" : "inf";
+function nodeColors(nodes) { const seen = {};
+  return nodes.map(n => { const k = kindOfNode(n), i = seen[k] = (seen[k] == null ? 0 : seen[k] + 1); return SHADES[k][i % SHADES[k].length]; }); }
+const colsOf = W => W._cols || (W._cols = nodeColors(W.nodes));
+const colOf = (W, i) => colsOf(W)[i] || NONE;
+// Look B (his pick, 2026-11-27; the default): no green for "fine" (a rule that holds is a quiet word; red only for
+// broken), an ink playhead, ink preset links, and "What flows where" drawn like the Overview's figures.
+// /replay?look=a shows the look without these, for comparison.
+const LOOK_B = new URLSearchParams(location.search).get("look") !== "a";
+if (LOOK_B) document.documentElement.classList.add("look-b");
 
 // ---------------------------------------------------------------- state
 // Settled so far: square panels, a Readings menu, and two steps (see the telemetry first, then check it).
@@ -742,7 +780,7 @@ const spanBar = sp => { if (!sp) return ""; const [a, len, n] = sp, x0 = Math.ma
 const scrubChip = (key, v, sp, color) => `<span class="scrubchip${v ? " moved" : ""}" data-scrub="${key}" style="--rc:${color}" title="Hold and drag sideways to slide this clip within its recording: 1 px = 1 s, with Shift 10 s. It snaps to 0 on the way past; double-click resets.">` +
   `<span class="sv">${fmtShift(v)}</span>${spanBar(sp)}</span>`;
 function sideRows() {
-  let li = 0; const total = sideNodes(st.side), C = window.BOX_COLORS || ["#2a78d6", "#eb6834", "#1baf7a", "#7f5af0"];
+  let li = 0; const total = sideNodes(st.side), C = colsOf(rawWorld());
   const extOK = BOXES.boxes.length > 0 || BOXES.recordings.length > 0;
   const kindPop = (i, cur, w) => `<div class="pop">` + ["pre", "inf", "ext"].map(k => {
       const need = k === "ext" ? 1 : KINDS[k].cells[0].nodes.length, ok = (k === cur || total - w + need <= SIDE_MAX) && (k !== "ext" || extOK);
@@ -750,7 +788,7 @@ function sideRows() {
   const shiftCtl = (i, s, color) => scrubChip(`side:${i}`, s.shift || 0, clipSpan(s), color);
   const rows = st.side.map((s, i) => { const first = li, w = sideW(s); li += w;
     const name = w > 1 ? `node-${LETTERS[first]}+${LETTERS[first + 1]}` : `node-${LETTERS[first]}`;
-    const sw = Array.from({ length: w }, (_, j) => `<span class="sw" style="background:${C[(first + j) % C.length]}"></span>`).join("");
+    const sw = Array.from({ length: w }, (_, j) => `<span class="sw" style="background:${(C[first + j] || NONE)}"></span>`).join("");
     const isOpen = L => st.seg === `${i}:${L}`;
     const kinds = `<span class="sseg first${isOpen(-1) ? " open" : ""}"><button data-sseg="${i}:-1">${KTITLE[s.k]}</button>${isOpen(-1) ? kindPop(i, s.k, w) : ""}</span>`;
     const rm = st.side.length > 1 ? `<button class="srm" data-srm="${i}" title="remove">×</button>` : "<span></span>";
@@ -767,7 +805,7 @@ function sideRows() {
         (s.mode === "rec" && rec ? `<div class="divl"></div><button class="danger" data-xdel="${i}">Delete “${esc(rec.name)}”</button>` : "") + `</div>` : ""}</span>`;
       const val = s.mode === "live" ? s.name || "" : rec ? rec.name : "";
       const nameBox = `<span class="sep">›</span><input class="xname" data-xname="${i}" value="${esc(val)}" placeholder="name your workload" title="${s.mode === "live" ? "A label for this box; also the name a recording is saved under" : "Rename this recording"}">`;
-      const tail = s.mode === "live" ? `<button class="recbtn" data-recbtn="${i}"></button>` : shiftCtl(i, s, C[first % C.length]);
+      const tail = s.mode === "live" ? `<button class="recbtn" data-recbtn="${i}"></button>` : shiftCtl(i, s, C[first] || NONE);
       return `<div class="srow"><span class="nn">${sw}${name}</span><span class="segs">${kinds}${boxSeg}${modeSeg}${nameBox}${tail}</span>${rm}</div>`; }
     const K = KINDS[s.k];
     const levels = K.levers.map((lv, L) => `<span class="sep">›</span><span class="sseg${isOpen(L) ? " open" : ""}"><button data-sseg="${i}:${L}">${esc(SHOW[s.k][L](lv.opts[s.pick[L]]))}</button>${isOpen(L) ? `<div class="pop"><div class="g">${esc(lv.label)}</div>` +
@@ -775,7 +813,7 @@ function sideRows() {
         const fits = q && total - w + q.nodes.length <= SIDE_MAX;
         const tip = !q ? "not recorded yet" : !fits ? `at most ${SIDE_MAX} nodes` : exact ? "" : "recorded in another combination; the other choices in this row will change";
         return `<button data-sopt="${i}:${L}:${j}" class="${j === s.pick[L] ? "on" : q && !exact ? "far" : ""}"${!q || !fits ? " disabled" : ""}${tip ? ` title="${tip}"` : ""}>${esc(o)}${!q ? "<small>soon</small>" : ""}</button>`; }).join("") + `</div>` : ""}</span>`).join("");
-    return `<div class="srow"><span class="nn">${sw}${name}</span><span class="segs">${kinds}${levels}${shiftCtl(i, s, C[first % C.length])}</span>${rm}</div>`; }).join("");
+    return `<div class="srow"><span class="nn">${sw}${name}</span><span class="segs">${kinds}${levels}${shiftCtl(i, s, C[first] || NONE)}</span>${rm}</div>`; }).join("");
   const add = total < SIDE_MAX ? `<span class="sseg addwrap${st.addMenu ? " open" : ""}"><button class="sadd" data-sadd>＋ Add a node</button>${st.addMenu ? `<div class="pop">` +
     [["pre", "Pretraining", "TorchTitan, Llama 3 8B · recorded"], ["inf", "Inference", "vLLM, DeepSeek V4.1 Flash · recorded"],
      ["ext", "External box", extOK ? [BOXES.boxes.length ? `${BOXES.boxes.length} connected` : "", BOXES.recordings.length ? `${BOXES.recordings.length} recorded` : ""].filter(Boolean).join(" · ") : "connect a box first: ＋ Add your GPUs"]]
@@ -824,16 +862,16 @@ function declTable() {
       seg(`xh${k}`, box ? `your box · ${e.host}` : e.host, hosts.map(h => [h, h, h === e.host, "", BOXES.boxes.some(b => b.host === h) ? "connected" : "recordings only"])) + `<span class="sep">›</span>` +
       seg(`xm${k}`, e.mode === "live" ? "● Live" : rec ? rec.name : "Recorded", [["live", "Live", e.mode === "live", box ? "" : "this box isn't connected right now", box ? "what it's doing now" : ""],
         ...recs.map(m => [`r:${m.id}`, m.name, e.mode === "rec" && m.id === e.rid, "", `${mmss(m.n)} · ${new Date(m.started * 1000).toTimeString().slice(0, 5)}`])]) +
-      (e.mode === "rec" ? scrubChip(`ext:${k}`, e.shift || 0, rec ? [e.shift || 0, rec.n, rec.n] : null, BOXC[ni]) : "") + `</span>`;
+      (e.mode === "rec" ? scrubChip(`ext:${k}`, e.shift || 0, rec ? [e.shift || 0, rec.n, rec.n] : null, colOf(W, ni)) : "") + `</span>`;
     const J = LIVEJ[e.host], dj = J && J.jobs.filter(j => j.declared && j.end == null);   // running jobs only (found 2026-11-22: a cancelled job still showed)
     const says = e.mode === "rec" ? `<div class="pills dp">` + ["i", "p", "n"].map(d => `<button data-xdecl="${k}:${d}" class="${e.decl === d ? "on " + d : ""}">${{ i: "inference", p: "pretraining", n: "nothing" }[d]}</button>`).join("") + `</div>`
       : `<span class="fromslurm">${!J ? "asking the node…" : !J.slurm ? "no scheduler connected" : dj.length ? dj.map(j => `<span class="dtag ${j.declared[0]}">${j.declared}</span> job ${esc(j.id)}`).join(" · ") : "no declared job on it"}<small>from Slurm, live</small></span>`;
-    return `<tr><td class="nn">${sw(BOXC[ni])}node-${LETTERS[ni]}<button class="xrm" data-xrm="${k}" title="remove">×</button></td><td>${what}</td><td>${says}</td></tr>`; }).join("");
+    return `<tr><td class="nn">${sw(colOf(W, ni))}node-${LETTERS[ni]}<button class="xrm" data-xrm="${k}" title="remove">×</button></td><td>${what}</td><td>${says}</td></tr>`; }).join("");
   const canAdd = P.ext.length < 2 && hosts.length;
   const notes = (W.extNotes || []).map(x => `<span class="label">Should</span><span>${x.should}</span><span class="label">Did</span><span>${x.did}</span>`).join("");
   return `<table class="dtab"><thead><tr><th style="width:120px">Node</th><th>What it really runs</th><th style="width:300px">What Slurm declares</th></tr></thead><tbody>
-      <tr><td class="nn">${sw(BOXC[0])}${split ? "node-a · prefill" : "node-a"}</td><td>${serveRow}</td><td>${decl("a")}</td></tr>
-      <tr><td class="nn">${sw(BOXC[1])}${split ? "node-b · decode" : "node-b"}</td><td>${trainRow}</td><td>${decl("b")}</td></tr>${extRows}</tbody></table>
+      <tr><td class="nn">${sw(colOf(W, 0))}${split ? "node-a · prefill" : "node-a"}</td><td>${serveRow}</td><td>${decl("a")}</td></tr>
+      <tr><td class="nn">${sw(colOf(W, 1))}${split ? "node-b · decode" : "node-b"}</td><td>${trainRow}</td><td>${decl("b")}</td></tr>${extRows}</tbody></table>
     ${canAdd ? `<button class="sadd xadd" data-xadd>＋ Add an external box</button>` : ""}
     <div class="presets"><span class="label">Presets</span>${presets}</div>
     <div class="expect"><span class="label">Should</span><span>${esc(W.should)}</span><span class="label">Did</span><span>${did}</span><span></span><span>${gridLine}</span>${notes}</div>${grid}`;
@@ -872,17 +910,19 @@ function archSVG(W) {
   const N = W.nodes.length, y0 = 262, bandT = y0 - 22, bandB = y0 + (N - 1) * 40 + 24, HH = bandB + 48;
   const G = Math.max(...W.nodes.map(n => n.gpus)), W8 = G * 14 - 3, x0 = Math.round(150 - (W8 + 18) / 2), spine = x0 + W8 + 14, inX = 128;
   const gpus = W.nodes.map((n, ni) => { const y = y0 + ni * 40;
-    return `<text x="${x0}" y="${y - 5}" class="a-s">${esc(n.name)}</text>` +
+    const host = LOOK_B ? `<rect class="a-host" x="${x0 - 7}" y="${y - 19}" width="${n.gpus * 14 + 11}" height="35" rx="4"/><line class="a-hl" x1="${x0 - 7}" y1="${y - 3}" x2="${x0 + n.gpus * 14 + 4}" y2="${y - 3}"/>` +
+      `<text x="${x0 + n.gpus * 14 - 1}" y="${y - 7}" text-anchor="end" class="a-s a-cl">collector</text>` : "";
+    return host + `<text x="${x0}" y="${y - 7}" class="a-s">${esc(n.name)}</text>` +
       Array.from({ length: n.gpus }, (_, g) => `<rect class="a-gpu" data-k="${ni}:${g}" x="${x0 + g * 14}" y="${y}" width="11" height="11"/>`).join(""); }).join("");
   const flow = (d, dash) => `<path d="${d}" class="a-line${dash ? " dash" : ""}" marker-end="url(#a-arr)"/><path d="${d}" class="a-dots"/>`;
   const comb = W.nodes.map((n, i) => { const d = `M${x0 + n.gpus * 14} ${y0 + i * 40 + 5.5} H${spine} V228 H${inX} V168`;
     return `<path d="${d}" class="a-line"${i ? "" : ' marker-end="url(#a-arr)"'}/><path d="${d}" class="a-dots" style="animation-delay:${-0.3 * i}s"/>`; }).join("");
   return `<svg id="arch" class="arch" viewBox="0 0 300 ${HH}"><defs><marker id="a-arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="currentColor" stroke-width="1.6"/></marker>
       <pattern id="a-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--surface)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--grid)" stroke-width="2"/></pattern></defs>
-    <rect x="6" y="94" width="288" height="${HH - 100}" class="a-prover"/><text x="150" y="${HH - 14}" text-anchor="middle" class="a-s">Prover</text>
-    <g class="a-later"><rect x="70" y="6" width="160" height="42" class="a-org"/><text x="150" y="31" text-anchor="middle" class="a-t">Verifier</text>
+    <rect x="6" y="94" width="288" height="${HH - 100}" rx="10" class="a-prover"/><text x="150" y="${HH - 14}" text-anchor="middle" class="a-s">Prover</text>
+    <g class="a-later"><rect x="70" y="6" width="160" height="42" rx="${LOOK_B ? 6 : 0}" class="a-org"/><text x="150" y="31" text-anchor="middle" class="a-t">Verifier</text>
       ${flow("M150 116 V52", true)}<text x="160" y="69">report</text><text x="160" y="83" style="font-size:10px" id="a-rep"></text></g>
-    <rect x="80" y="116" width="140" height="48" class="a-node"/><text x="150" y="136" text-anchor="middle" class="a-nt">Verification Node</text><text x="150" y="151" text-anchor="middle" class="a-ns" id="a-node"></text>
+    <rect x="80" y="116" width="140" height="48" rx="${LOOK_B ? 4 : 0}" class="a-node"/><text x="150" y="136" text-anchor="middle" class="a-nt">Verification Node</text><text x="150" y="151" text-anchor="middle" class="a-ns" id="a-node"></text>
     <g class="a-later"><rect x="14" y="${bandT}" width="262" height="${bandB - bandT}" rx="8" class="a-sched"/>
       <text x="270" y="${bandB + 12}" text-anchor="end" class="a-s">Slurm, the central scheduler · <tspan id="a-jobs"></tspan></text></g>
     ${comb}<text x="${inX - 8}" y="196" text-anchor="end">telemetry</text><text x="${inX - 8}" y="209" text-anchor="end" class="a-s">from each node</text>
@@ -899,7 +939,7 @@ function paintArch(W, now) {
   // the report: one broken rule per line, so three names fit beside the arrow
   const rep = $("#a-rep"), lines = W.raw || warm ? ["nothing yet"] : nbad ? [...new Set(bad.map(v => RSHORT[v.rule]))] : ["all rules hold"];
   rep.innerHTML = lines.map((q, i) => `<tspan x="160" dy="${i ? 11 : 0}">${q}</tspan>`).join("");
-  rep.style.fill = W.raw || warm ? css("--muted") : bad.length ? RED : css("--good");
+  rep.style.fill = W.raw || warm ? css("--muted") : bad.length ? RED : LOOK_B ? css("--ink2") : css("--good");
   const nj = W.jobs.filter(j => j.start <= now).length; $("#a-jobs").textContent = `${nj} job${nj === 1 ? "" : "s"} declared`;
 }
 
@@ -1047,8 +1087,8 @@ const svg = (Wd, H, body) => `<svg viewBox="0 0 ${Wd} ${H}" style="height:${H}px
 function axis(g, W, now, PB, H) {
   const { L, R, d1, x } = g, xn = x(now);
   let s = `<line x1="${L}" y1="${PB + 4}" x2="${R}" y2="${PB + 4}" stroke="${css("--axis")}"/>
-    <line x1="${xn}" y1="0" x2="${xn}" y2="${PB + 4}" stroke="${RED}" stroke-width="1.2"/>
-    <text x="${xn}" y="${H - 5}" text-anchor="middle" font-size="11.5" font-weight="600" fill="${RED}">now ${W.dur ? mmss(now) : new Date().toTimeString().slice(0, 5)}</text>`;
+    <line x1="${xn}" y1="0" x2="${xn}" y2="${PB + 4}" stroke="${LOOK_B ? css("--ink") : RED}" stroke-width="1.2"/>
+    <text x="${xn}" y="${H - 5}" text-anchor="middle" font-size="11.5" font-weight="600" fill="${LOOK_B ? css("--ink") : RED}">now ${W.dur ? mmss(now) : new Date().toTimeString().slice(0, 5)}</text>`;
   if (W.dur) for (let t = 0; t <= d1; t += tickStep(d1)) { const xt = x(t); if (Math.abs(xt - xn) < 44) continue;
     s += `<line x1="${xt}" y1="${PB + 4}" x2="${xt}" y2="${PB + 8}" stroke="${css("--axis")}"/><text x="${xt}" y="${H - 5}" text-anchor="${t ? "middle" : "start"}" font-size="11" fill="${css("--muted")}">${mmss(t)}</text>`; }
   return s;
@@ -1106,7 +1146,7 @@ function paintTL(el, W, now) {
     const cur = jobs.find(j => now < j.limit), viol = W.viol.filter(v => v.a <= now && v.gpus.some(inLane)); let labelEnd = -1;
     const where = `${esc(ln.nodeName)} · GPU ${ln.g[0]}–${ln.g[1]}`;
     s += `<text x="0" y="${y0 + 27}" font-size="12.5" fill="${css("--ink")}">${where}</text>
-          <text x="0" y="${y0 + 43}" font-size="11" fill="${cur ? TYPE[cur.type] : viol.length ? RED : css("--muted")}">${cur ? "declared " + cur.type : "nothing declared"}</text>
+          <text x="0" y="${y0 + 43}" font-size="11" fill="${cur ? TYPE_TEXT[cur.type] : viol.length ? RED : css("--muted")}">${cur ? "declared " + cur.type : "nothing declared"}</text>
           <line x1="${L}" y1="${y0 + LANE}" x2="${R}" y2="${y0 + LANE}" stroke="${css("--grid")}"/>
           <line x1="${L}" y1="${yv(SCL.grid)}" x2="${R}" y2="${yv(SCL.grid)}" stroke="${css("--grid")}" stroke-dasharray="2 4"/>
           <text x="${L - 6}" y="${yv(SCL.grid) + 3}" text-anchor="end" font-size="9.5" fill="${css("--muted")}">${SCL.label}</text>
@@ -1189,7 +1229,7 @@ function ruleGraph(W, now, I) {
   const x = t => t / t1 * (Wd - 44), N = Math.min(150, Math.max(2, Math.ceil(now)));
   const lines = W.nodes.map((n, ni) => { const on = I.judged(W, ni, now), pts = [];
     for (let i = 0; i <= N; i++) { const t = i / N * now; pts.push((i ? "L" : "M") + x(t).toFixed(1) + " " + y(nodeVal(W, ni, t, I)).toFixed(1)); }
-    return `<path d="${pts.join(" ")}" fill="none" stroke="${BOXC[ni % BOXC.length]}" stroke-width="1.5" opacity="${on ? 1 : 0.3}"/>`; }).join("");
+    return `<path d="${pts.join(" ")}" fill="none" stroke="${colOf(W, ni)}" stroke-width="1.5" opacity="${on ? 1 : 0.3}"/>`; }).join("");
   // the SVG stretches to the pane's width (preserveAspectRatio none), which would stretch SVG text too,
   // so the labels are HTML laid over it, placed by percent across and px down (his note, 2026-11-12: "start" looked spread out)
   const pc = v => (v / Wd * 100).toFixed(2) + "%";
@@ -1203,7 +1243,7 @@ function ruleGraph(W, now, I) {
 function ruleDetail(W, now, k, act) {
   const I = RULE_INFO[k], badNodes = new Set(act.flatMap(v => v.gpus.map(g => +String(g).split(":")[0])));
   const nodes = W.nodes.map((n, ni) => { const on = I.judged(W, ni, now), v = mean60(W, ni, now, I), over = badNodes.has(ni);
-    return `<span class="${on ? "" : "off"}"><span class="nd" style="background:${BOXC[ni % BOXC.length]}"></span>${esc(n.name.split(" ")[0])} <span class="v${over ? " over" : ""}">${I.fmt(v)}</span>${over ? ` <span class="over">· over</span>` : on ? "" : ` · ${I.offText}`}</span>`; }).join("");
+    return `<span class="${on ? "" : "off"}"><span class="nd" style="background:${colOf(W, ni)}"></span>${esc(n.name.split(" ")[0])} <span class="v${over ? " over" : ""}">${I.fmt(v)}</span>${over ? ` <span class="over">· over</span>` : on ? "" : ` · ${I.offText}`}</span>`; }).join("");
   const anyJudged = W.nodes.some((_, ni) => I.judged(W, ni, now));
   return { q: `<span class="rq">${esc(I.q(W))}</span> <span class="rm">${I.on}</span>`, now: nodes + (anyJudged ? "" : `<span class="off">${I.none}</span>`), graph: ruleGraph(W, now, I) };
 }
