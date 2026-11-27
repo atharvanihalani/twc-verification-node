@@ -291,6 +291,11 @@
   .arch.paused .a-dots { animation-play-state: paused; }
   @keyframes flow { to { stroke-dashoffset: -15.1; } }
   .arch .a-gpu { fill: var(--axis); }
+  .arch [data-tip] { cursor: help; }
+  /* html body > div: outranks nav.js's "body > * { max-width: 1080px; margin: auto }" for page blocks */
+  html body > div.atip { position: fixed; display: none; z-index: 30; pointer-events: none; max-width: 260px; margin: 0; background: var(--ink); color: var(--surface);
+          font-size: 12.5px; line-height: 1.45; padding: 8px 11px; border-radius: 6px; }
+  .atip b { font-weight: 600; }
   .arch.rawmode .a-later { opacity: .2; } .arch.rawmode .a-later .a-dots { display: none; }
   /* 1b (his pick, 2026-11-12): Slurm is a hatched band round the nodes it runs; declarations leave it in green */
   .arch .a-sched { fill: url(#a-hatch); stroke: var(--axis); }
@@ -316,7 +321,7 @@
   html:root:root .arch .a-cl { font-size: 8.5px; }
   html:root:root .arch .a-org { fill: var(--surface); stroke: var(--s1); }
   html:root:root .arch .a-dots { stroke: var(--ink); }
-  html:root:root .arch .a-later:first-of-type .a-dots, html:root:root .arch .a-decl .a-dots { stroke: var(--s1); }
+  html:root:root .arch .a-report .a-dots, html:root:root .arch .a-decl .a-dots { stroke: var(--s1); }
   html:root:root .arch .a-decl { color: var(--s1); } html:root:root .arch .a-decl .a-line { stroke-dasharray: 4 3; }
   html:root:root .arch .a-decl text.lab { fill: var(--s1); }
 </style>
@@ -636,6 +641,7 @@ let _hashDone = false;
 function applyHash() {
   if (_hashDone || !IDX) return;
   const h = location.hash;
+  if (h === "#check") { if (!PAIRS) return; _hashDone = true; setMode("check"); return; }   // step 2 straight away (the Overview's Slurm link), once its data is in
   if (!/^#yourbox/.test(h)) { _hashDone = true; return; }
   if (!BOXES.boxes.length || (h === "#yourbox-check" && !PAIRS)) return;
   _hashDone = true;
@@ -909,23 +915,38 @@ function archSVG(W) {
   const gpus = W.nodes.map((n, ni) => { const y = y0 + ni * 40;
     const host = `<rect class="a-host" x="${x0 - 7}" y="${y - 19}" width="${n.gpus * 14 + 11}" height="35" rx="4"/><line class="a-hl" x1="${x0 - 7}" y1="${y - 3}" x2="${x0 + n.gpus * 14 + 4}" y2="${y - 3}"/>` +
       `<text x="${x0 + n.gpus * 14 - 1}" y="${y - 7}" text-anchor="end" class="a-s a-cl">collector</text>`;
-    return host + `<text x="${x0}" y="${y - 7}" class="a-s">${esc(n.name)}</text>` +
-      Array.from({ length: n.gpus }, (_, g) => `<rect class="a-gpu" data-k="${ni}:${g}" x="${x0 + g * 14}" y="${y}" width="11" height="11"/>`).join(""); }).join("");
+    return `<g data-tip="gpus">` + host + `<text x="${x0}" y="${y - 7}" class="a-s">${esc(n.name)}</text>` +
+      Array.from({ length: n.gpus }, (_, g) => `<rect class="a-gpu" data-k="${ni}:${g}" x="${x0 + g * 14}" y="${y}" width="11" height="11"/>`).join("") + `</g>`; }).join("");
   const flow = (d, dash) => `<path d="${d}" class="a-line${dash ? " dash" : ""}" marker-end="url(#a-arr)"/><path d="${d}" class="a-dots"/>`;
   const comb = W.nodes.map((n, i) => { const d = `M${x0 + n.gpus * 14} ${y0 + i * 40 + 5.5} H${spine} V228 H${inX} V168`;
     return `<path d="${d}" class="a-line"${i ? "" : ' marker-end="url(#a-arr)"'}/><path d="${d}" class="a-dots" style="animation-delay:${-0.3 * i}s"/>`; }).join("");
   return `<svg id="arch" class="arch" viewBox="0 0 300 ${HH}"><defs><marker id="a-arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="currentColor" stroke-width="1.6"/></marker>
       <pattern id="a-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--surface)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--grid)" stroke-width="2"/></pattern></defs>
-    <rect x="6" y="94" width="288" height="${HH - 100}" rx="10" class="a-prover"/><text x="150" y="${HH - 14}" text-anchor="middle" class="a-s">Prover</text>
-    <g class="a-later"><rect x="70" y="6" width="160" height="42" rx="6" class="a-org"/><text x="150" y="31" text-anchor="middle" class="a-t">Verifier</text>
+    <g data-tip="prover"><rect x="6" y="94" width="288" height="${HH - 100}" rx="10" class="a-prover" pointer-events="all"/><text x="150" y="${HH - 14}" text-anchor="middle" class="a-s">Prover</text></g>
+    <g class="a-later a-report"><g data-tip="verifier"><rect x="70" y="6" width="160" height="42" rx="6" class="a-org"/><text x="150" y="31" text-anchor="middle" class="a-t">Verifier</text></g>
       ${flow("M150 116 V52", true)}<text x="160" y="69">report</text><text x="160" y="83" style="font-size:10px" id="a-rep"></text></g>
-    <rect x="80" y="116" width="140" height="48" rx="4" class="a-node"/><text x="150" y="136" text-anchor="middle" class="a-nt">Verification Node</text><text x="150" y="151" text-anchor="middle" class="a-ns" id="a-node"></text>
+    <g data-tip="node"><rect x="80" y="116" width="140" height="48" rx="4" class="a-node"/><text x="150" y="136" text-anchor="middle" class="a-nt">Verification Node</text><text x="150" y="151" text-anchor="middle" class="a-ns" id="a-node"></text></g>
     <g class="a-later"><rect x="14" y="${bandT}" width="262" height="${bandB - bandT}" rx="8" class="a-sched"/>
       <text x="270" y="${bandB + 12}" text-anchor="end" class="a-s">Slurm, the central scheduler · <tspan id="a-jobs"></tspan></text></g>
     ${comb}<text x="${inX - 8}" y="196" text-anchor="end">telemetry</text><text x="${inX - 8}" y="209" text-anchor="end" class="a-s">from each node</text>
     <g class="a-later a-decl">${flow(`M276 ${bandT + 20} H286 V140 H224`)}<text x="282" y="196" text-anchor="end" class="lab">declarations</text><text x="282" y="209" text-anchor="end" class="a-s">job, type, GPUs</text></g>
     ${gpus}</svg>`;
 }
+// Hover notes on "What flows where" (his wording, 2026-11-27): one short reminder of what each part is.
+const ARCH_TIPS = {
+  verifier: ["Verifier", "The independent organization that checks the agreement is kept. It only sees the node's short reports, never the raw telemetry."],
+  node: ["Verification Node", "A tamper-resistant server living inside the prover's datacenter. It checks the telemetry against the rules on-site and sends out only a short report. Here, this is emulated by a fly.io server."],
+  prover: ["Prover", "The datacenter operator, a lab or neocloud, that has to show its GPUs are used as agreed. Assumed adversarial."],
+  gpus: ["GPU node and collector", "Each GPU node runs a collector, a lightweight always-on process that streams telemetry to the verification node at ~1hz."],
+};
+{ const tip = document.createElement("div"); tip.className = "atip"; document.body.appendChild(tip);
+  document.addEventListener("mousemove", e => {
+    const g = e.target.closest && e.target.closest("#arch [data-tip]"), t = g && ARCH_TIPS[g.dataset.tip];
+    if (!t) { tip.style.display = "none"; return; }
+    tip.innerHTML = `<b>${t[0]}</b><br>${t[1]}`; tip.style.display = "block";
+    const w = tip.offsetWidth, h = tip.offsetHeight, x = Math.min(e.clientX + 14, innerWidth - w - 8), y = e.clientY + 16 + h > innerHeight ? e.clientY - h - 12 : e.clientY + 16;
+    tip.style.left = Math.max(8, x) + "px"; tip.style.top = y + "px"; });
+  document.addEventListener("scroll", () => { tip.style.display = "none"; }, true); }
 function paintArch(W, now) {
   const root = $("#arch"); if (!root) return;
   const bad = W.viol.filter(v => activeV(v, now)), badG = new Set(bad.flatMap(v => v.gpus)), warm = now < 30, nbad = new Set(bad.map(v => v.rule)).size;
@@ -953,7 +974,7 @@ function render() {
   if (st.spot === "check" && !st.spotScrolled) { st.spotScrolled = true; setTimeout(() => { const p = $("[data-spot]"); if (!p) return; p.scrollIntoView({ behavior: "smooth", block: "center" });
     setTimeout(() => { const r = p.getBoundingClientRect(); if (r.top > innerHeight * 0.8) p.scrollIntoView({ block: "center" }); }, 900); }, 80); }   // smooth scrolling stalls in some embedded views
   const raw = st.mode === "raw", W = cur().W, sp1 = raw ? " data-spot" : "";
-  const note = raw ? `<span class="stepnote">step 2</span>` : "";
+  const note = "";   // the "step 2" tag on panes that belong to step 2 went 2026-11-27 (his call); they still dim in step 1
   const cls = s => raw ? s.replace('class="pane"', 'class="pane later"') : s;
   $("#app").innerHTML = `<div class="cols"><div>
       <div class="head"><h1>Replay demo</h1><span class="grow"></span><button class="btn" data-act="add">＋ Add your GPUs</button></div>

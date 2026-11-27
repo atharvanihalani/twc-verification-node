@@ -57,7 +57,7 @@ The same pages are served in three looks, picked by the URL: `/` and `/v1/…` u
 |---|---|
 | `node/app.py` | The verification node (FastAPI): ingest, rule loop, APIs, pages |
 | `node/rules/` | One file per rule, plus the spec and its test |
-| `node/pages/`, `node/static/` | The Overview, Replay, Walkthrough and Debug pages; replay data |
+| `node/pages/`, `node/static/` | The Overview, Replay and Walkthrough pages; replay data |
 | `node/static/theme/` | The site themes (gitignored, see Design versions) |
 | `collector.py` | Telemetry collector for GPU boxes (dependency: `nvidia-ml-py`) |
 | `slurm_reporter.py` | Sends the Slurm job table to the node |
@@ -73,6 +73,6 @@ SITE_PASSWORD=pick-one .venv/bin/uvicorn node.app:app --port 8000
 .venv/bin/python node/rules/test_spec.py
 ```
 
-To stream from a real GPU box, open **Debug → Connect a box** on a running node. It shows a one-line install command with the node's URL filled in.
+To stream from a real GPU box, follow the **Walkthrough** on a running node. Its first step is a one-line install command with the node's URL filled in.
 
 Open work is in [TODOS.md](TODOS.md).

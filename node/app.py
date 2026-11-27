@@ -18,7 +18,6 @@ import math
 import os
 import re
 import secrets
-import subprocess
 import sys
 import time
 from collections import deque
@@ -426,15 +425,16 @@ def api_reset():
 LIVE_KEEP_S = 120
 LIVE = {}   # host -> {"slot", "gpus": {idx: name}, "last_seen": t, "batches": n, "rows": {gpu: deque[row]}, "hello"}
 MAX_BOXES = 8          # boxes shown at once; each gets a fixed slot (= its colour on the page). 8 so a
-                      # 4-way --split box still leaves room for other boxes / the replay
+                      # 4-way --split box still leaves room for other boxes
 EVICT_SILENT_S = 60    # a new box may take the slot of one that has been silent this long
 EXPIRE_SILENT_S = 300  # …and a box silent this long drops off the page by itself
-LIVE_EVENTS = deque(maxlen=200)   # connection log for the Raw data page: hellos, refusals, evictions
 _REFUSED_AT = {}
 
 
 def live_event(kind, host, text, **extra):
-    LIVE_EVENTS.append({"t": time.time(), "kind": kind, "host": host, "text": text, **extra})
+    # connection log (hellos, refusals, evictions, Slurm reporters): to the server log, so `fly logs` shows it.
+    # The Debug page used to show it; it went 2026-11-27.
+    print(f"[{kind}] {host}: {text}", flush=True)
 
 
 def short_gpu(name):
@@ -903,43 +903,6 @@ async def start_rules_loop():
     asyncio.create_task(rules_loop())
 
 
-def rules_view():
-    last = LIVE_RULES["last"]
-    return {"every_s": RULES_EVERY_S, "window_s": rules.WINDOW_S, "min_coverage_s": rules.MIN_COVERAGE_S,
-            "text": {k: rules.RULE_TEXT[k] for k in SHOWN_RULES},
-            "thresholds": {"idle_w": rules.undeclared_load.BUSY_W, "idle_w_blackwell": rules.undeclared_load.BUSY_W_BLACKWELL, "tensor_util_pct": rules.training_shaped.TENSOR_UTIL_PCT,
-                           "pcie_sent_gb_s": rules.boundary_traffic.PCIE_SENT_GB_S},
-            "last": {k: v for k, v in last.items() if k != "jobs_gpus"} if last else None,
-            "violations": list(LIVE_RULES["closed"]) + list(LIVE_RULES["open"].values()),
-            "open": [f"{k[0]}|{k[1]}" for k in LIVE_RULES["open"]]}
-
-
-@app.get("/api/slurm")
-def api_slurm():
-    now, look = time.time(), gpu_lookup()
-    clusters = []
-    for name, c in SLURM.items():
-        jobs = []
-        for j in c["jobs"].values():
-            gl = []
-            for a in j.get("gpus") or []:
-                for i in a.get("idx") or []:
-                    gl.append({"node": a.get("node"), "idx": i, **(look.get((a.get("node"), i)) or {})})
-            jobs.append({**j, "gpu_list": gl, "streaming": sum(1 for g in gl if g.get("host"))})
-        jobs.sort(key=lambda j: -(j.get("submit") or j.get("first_seen") or 0))
-        clusters.append({"cluster": name, "reporter": c.get("reporter"), "reporter_host": c.get("reporter_host"),
-                         "from_ip": c.get("from_ip"), "age_s": round(now - c.get("received_at", now), 1),
-                         "poll_s": c.get("poll_s"), "seq": c.get("seq"), "missed": c.get("missed"),
-                         "reports": c.get("reports"), "error": c.get("error"), "raw": c.get("raw", ""),
-                         "received_at": c.get("received_at"), "jobs": jobs})
-    def phys(h):   # the box's own GPU numbers: a --split part's GPUs are renumbered from 0, physical_index keeps 4-7
-        gs = (h.get("hello") or {}).get("gpus") or []
-        return {int(g.get("index", i)): g.get("physical_index", g.get("index", i)) for i, g in enumerate(gs) if isinstance(g, dict)}
-    boxes = [{"host": host, "label": box_label(h), "age_s": round(now - h["last_seen"], 1),
-              "gpus": sorted(int(g) for g in h["gpus"]), "phys": phys(h)} for host, h in sorted(LIVE.items())]   # light list for the Replay page
-    return {"now": now, "clusters": clusters, "boxes": boxes, "rules": rules_view()}
-
-
 # ---------------------------------------------------------------- one box, for the Replay page's step 2
 # A connected box in the step-2 table: the Slurm jobs that sit on it and the live rule results on its GPUs, in its own
 # GPU numbers. A recording made on the page: the real rules run over it once per declaration, as make_replay_data.py
@@ -1021,66 +984,6 @@ def api_rec_judged(rid: str, decl: str = ""):
     return FileResponse(cache, media_type="application/json")
 
 
-# ---------------------------------------------------------------- replay feed
-# A recorded run played into /api/collect by replay_feed.py, started and stopped from the
-# Debug page. It runs as a child process and POSTs over localhost, so it takes exactly the
-# path a real collector takes. Replay hosts are named "replay · <name>" so the page can tag them.
-REPLAY_FILE = HERE.parent / "replays" / "c1-tp8-c64.jsonl.gz"
-REPLAY_PREFIX = "replay · "
-REPLAY = {"proc": None, "host": None}
-
-
-_REPLAY_HDR = {}
-
-
-def replay_header():
-    if not _REPLAY_HDR:
-        import gzip
-        with gzip.open(REPLAY_FILE, "rt") as f:
-            _REPLAY_HDR.update(json.loads(f.readline()))
-    return _REPLAY_HDR
-
-
-@app.post("/api/replay/start")
-def api_replay_start(request: Request):
-    p = REPLAY["proc"]
-    if p and p.poll() is None:
-        return {"ok": True, "already": True, "host": REPLAY["host"]}
-    hdr = replay_header()
-    host, now = REPLAY_PREFIX + hdr["name"], time.time()
-    if host not in LIVE and len(LIVE) >= MAX_BOXES and all(now - x["last_seen"] <= EVICT_SILENT_S for x in LIVE.values()):
-        return JSONResponse({"ok": False, "error": f"already {MAX_BOXES} boxes on the page"}, status_code=409)
-    port = request.scope.get("server", (None, 8000))[1]   # our own port: 8000 locally, 8080 on Fly
-    REPLAY["host"] = host
-    REPLAY["proc"] = subprocess.Popen(
-        [sys.executable, str(HERE.parent / "replay_feed.py"), "--node", f"http://127.0.0.1:{port}",
-         "--file", str(REPLAY_FILE), "--host", REPLAY["host"], "--exit-with-parent"],
-        env={**os.environ, "TWC_PASSWORD": SITE_PASSWORD or ""})
-    return {"ok": True, "host": REPLAY["host"]}
-
-
-@app.post("/api/replay/stop")
-def api_replay_stop():
-    p = REPLAY["proc"]
-    if p and p.poll() is None:
-        p.terminate()
-        try:
-            p.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            p.kill()
-    REPLAY["proc"] = None
-    for host in [h for h in LIVE if h.startswith(REPLAY_PREFIX)]:   # drop its data so the page goes back to empty
-        LIVE.pop(host, None)
-        live_event("stopped", host, "replay stopped from the page; slot freed")
-    return {"ok": True}
-
-
-@app.on_event("shutdown")
-def stop_replay_on_shutdown():
-    if REPLAY["proc"] and REPLAY["proc"].poll() is None:
-        REPLAY["proc"].terminate()
-
-
 def ingest_stats(h, now):
     recent = [x for x in h["recv"] if x[0] > now - 60]
     times = [x[0] for x in h["recv"] if x[0] > now - 300]
@@ -1141,44 +1044,6 @@ def api_live():
                      "batches": h["batches"], "hello_at": hello.get("received_at"),
                      "gpus": gpus, "mean": {k: mean_series(v) for k, v in full.items()},
                      "ingest": ingest_stats(h, now), "double_counted": double_counted(host)}
-        rep = hello.get("replay") or ({"label": replay_header().get("label", "recorded"), "about": replay_header().get("about", "")}
-                                      if host.startswith(REPLAY_PREFIX) else None)
-        if rep:
-            out[host]["replay"], out[host]["about"] = rep.get("label", "recorded"), rep.get("about", "")
-        # only the replay this node started itself can be stopped from the page
-        out[host]["stoppable"] = host == REPLAY["host"] and REPLAY["proc"] is not None and REPLAY["proc"].poll() is None
-    return out
-
-
-@app.get("/api/live/events")
-def api_live_events():
-    """Connection log, newest first: hellos (with everything the box said), refusals, evictions."""
-    return list(reversed(LIVE_EVENTS))
-
-
-@app.get("/api/live/raw")
-def api_live_raw(host: str, stream: int = 0):
-    """For the Raw tab: per GPU, the newest value of every field and when it was read,
-    the merged 'inbound this instant' record, and (optionally) the last 30 s of samples."""
-    h = LIVE.get(host)
-    if not h:
-        return JSONResponse({"error": "unknown host"}, status_code=404)
-    newest_t = max((q[-1]["t"] for q in h["rows"].values() if q), default=None)
-    gpus = {}
-    for g, q in sorted(h["rows"].items()):
-        if not q:
-            continue
-        fast, slow = q[-1], next((r for r in reversed(q) if "energy_mj" in r), {})
-        fields = {k: {"v": v, "t": slow["t"]} for k, v in slow.items() if k not in ("t", "gpu", "power_w")}
-        if fast.get("power_w") is not None:
-            fields["power_w"] = {"v": fast["power_w"], "t": fast["t"]}
-        gpus[g] = {"name": h["gpus"].get(str(g)), "fields": fields, "instant": {**slow, **fast}}
-    lb = h.get("last_batch", {})
-    out = {"host": host, "label": box_label(h), "hello": h.get("hello"), "newest_t": newest_t, "received_at": h.get("last_seen"),
-           "batch": {"n_samples": lb.get("n_samples"), "bytes": lb.get("bytes")}, "gpus": gpus}
-    if stream and newest_t is not None:
-        rows = [r for q in h["rows"].values() for r in q if r["t"] > newest_t - 30]
-        out["stream"] = sorted(rows, key=lambda r: (-r["t"], r["gpu"]))
     return out
 
 
@@ -1199,13 +1064,10 @@ def reporter_script():
 
 
 @app.get("/live")
-def live_redirect():
-    return RedirectResponse("/debug")
-
-
 @app.get("/debug")
-def debug_view():
-    return page("debug.html")
+def debug_gone():
+    # The Debug page was deleted on 2026-11-27 (his call). Its old links, e.g. in his shared Google Doc, land on the Replay demo.
+    return RedirectResponse("/replay")
 
 
 class NoCacheStatic(StaticFiles):
@@ -1239,9 +1101,7 @@ class DesignPrefix:
                     rest = path[len(p):]
                     if rest in ("", "/"):
                         rest = "/overview"
-                    elif rest == "/live":
-                        rest = "/debug"   # /live redirects to /debug, which would drop the prefix
-                    if rest.startswith(("/overview", "/replay", "/walkthrough", "/debug", "/live")):
+                    if rest.startswith(("/overview", "/replay", "/walkthrough")):
                         scope = dict(scope, path=rest, raw_path=rest.encode())
                     break
         return await self.inner(scope, receive, send)

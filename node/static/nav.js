@@ -1,4 +1,4 @@
-// Shared top bar: Overview · Replay demo · Walkthrough · Debug. Include with <script src="/static/nav.js"></script>
+// Shared top bar: Overview · Replay demo · Walkthrough (the Debug tab went 2026-11-27). Include with <script src="/static/nav.js"></script>
 // as the first thing in <body>.
 (function () {
   const SECTIONS = [
@@ -7,7 +7,6 @@
     { label: "Walkthrough", href: "/walkthrough", match: p => p === "/walkthrough" },
     // The IVO view is switched off for now (see TODOS.md). To bring it back: restore this line and the /ivo route in app.py.
     // { label: "IVO", href: "/ivo", match: p => p === "/ivo" },
-    { label: "Debug", href: "/debug", match: p => p.startsWith("/debug") || p === "/live" },
   ];
   const style = document.createElement("style");
   style.textContent = `
@@ -33,7 +32,7 @@
     `<a href="${PREFIX + s.href}" class="${s.match(here) ? "on" : ""}">${s.label}</a>`).join("");
   document.body.prepend(nav);
   if (PREFIX) {
-    const PAGES = /^\/(overview|replay|walkthrough|debug|live)?(?=$|[#?])/;
+    const PAGES = /^\/(overview|replay|walkthrough)?(?=$|[#?])/;
     const fix = a => { const h = a && a.getAttribute("href"); if (h && h[0] === "/" && h[1] !== "/" && PAGES.test(h)) a.setAttribute("href", PREFIX + h); };
     // links in the page as written, and any the page draws later, when they are followed
     document.addEventListener("DOMContentLoaded", () => document.querySelectorAll("a[href^='/']").forEach(fix));

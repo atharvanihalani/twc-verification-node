@@ -63,7 +63,7 @@
 <script src="/static/nav.js"></script>
 <main class="setup">
   <h1>Walkthrough</h1>
-  <p class="lede">This walkthrough assumes you have an 8x Nvidia SXM node. If you don't, <a href="/debug#live">click here</a>. So far it has only been tested on 8× H200 and 8× B200 nodes; other GPUs may not work.</p>
+  <p class="lede">This walkthrough assumes you have an 8x Nvidia SXM node. If you don't, <a href="/replay">watch the recordings on the Replay demo</a>. So far it has only been tested on 8× H200 and 8× B200 nodes; other GPUs may not work.</p>
 
   <section>
     <h2><span class="n">1</span>Install everything</h2>
@@ -406,7 +406,7 @@ nohup ${PY} ~/.twc-setup/pd_proxy.py --host 127.0.0.1 --port 8192 \\
   let ours = false; try { ours = Date.now() - (+localStorage.getItem("twc-wt-copied") || 0) < 3600e3; } catch (e) { }
   document.querySelectorAll('[data-copy="wl-cmd"], [data-copy="sc-cmd"], [data-copy="x-cmd"]').forEach(b => b.addEventListener("click", () => {
     ours = true; try { localStorage.setItem("twc-wt-copied", String(Date.now())); } catch (e) { } }));
-  // The box status line comes from the same 1 s poll as the Debug tab.
+  // The box status line comes from live.js's 1 s poll of /api/live.
   TWCLive.subscribe(d => {
     const hosts = Object.keys(d);
     $("boxstatus").className = "status" + (hosts.length ? " on" : "");

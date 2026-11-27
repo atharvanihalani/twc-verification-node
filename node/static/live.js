@@ -1,5 +1,5 @@
-// Shared pieces for the debug pages: one poller of /api/live and three renderers
-// (live telemetry, ingest health, raw batch) that any layout can mount anywhere.
+// Shared pieces: one poller of /api/live and the live-telemetry renderer (Replay, Walkthrough). The ingest-health and
+// raw-batch renderers and the recorded-trace player went with the Debug page, 2026-11-27.
 (function () {
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const style = document.createElement("style");
@@ -56,22 +56,14 @@
   let liveView = null;   // {el, data}: lets a toggle redraw at once instead of on the next poll
   const bySlot = data => Object.keys(data).sort((a, b) => data[a].slot - data[b].slot);
 
-  // box toggles, replay Play / Stop: delegated, since the box rows are rebuilt when boxes come and go
-  document.addEventListener("click", async e => {
-    const t = e.target.closest("[data-tog]");
-    if (t) {
-      const x = t.dataset.tog; hidden.has(x) ? hidden.delete(x) : hidden.add(x); saveHidden();
-      if (liveView) renderLive(liveView.el, liveView.data);
-      return;
-    }
-    const b = e.target.closest("[data-act^='replay-']"); if (!b) return;
-    e.preventDefault(); b.textContent = b.dataset.act === "replay-start" ? "Starting…" : "Stopping…";
-    const r = await fetch("/api/replay/" + (b.dataset.act === "replay-start" ? "start" : "stop"), { method: "POST" });
-    if (!r.ok) b.textContent = (await r.json().catch(() => ({}))).error || "Failed";
+  // box toggles: delegated, since the box rows are rebuilt when boxes come and go
+  document.addEventListener("click", e => {
+    const t = e.target.closest("[data-tog]"); if (!t) return;
+    const x = t.dataset.tog; hidden.has(x) ? hidden.delete(x) : hidden.add(x); saveHidden();
+    if (liveView) renderLive(liveView.el, liveView.data);
   });
   // connectHref: where "Connect a box" goes; the Walkthrough's section 1 installs the collector (Debug's own Connect page went, 2026-11-22)
-  const noDataBarFor = connectHref => `<div class="nodata"><a class="act" href="${connectHref}">Connect a box</a>
-    <button class="act" data-act="replay-start">Play a recorded trace</button></div>`;
+  const noDataBarFor = connectHref => `<div class="nodata"><a class="act" href="${connectHref}">Connect a box</a></div>`;
   const noDataBar = noDataBarFor("/walkthrough");
 
   // short: just the state (compact view), without the batch count
@@ -82,16 +74,6 @@
       (live ? "streaming" : "silent for " + Math.round(h.age_s) + " s") + (short ? "" : ` · ${h.batches} batches received`) +
       Object.entries(h.double_counted || {}).map(([o, n]) => ` · <b style="color:${css("--crit")}">${n} GPU(s) also reported by ${esc(o)}</b>`).join("");
   };
-  const section = (el, host, cls) => {
-    let s = el.querySelector(`[data-host="${CSS.escape(host)}"]`);
-    if (!s) { el.querySelector(".empty")?.remove(); s = document.createElement("section");
-              s.className = "host " + cls; s.dataset.host = host; el.appendChild(s); }
-    return s;
-  };
-  // drop sections for boxes the node no longer reports (e.g. after a node restart wiped its memory)
-  const prune = (el, data) => el.querySelectorAll("section.host").forEach(s => { if (!(s.dataset.host in data)) s.remove(); });
-  const noData = el => { if (!el.children.length) el.innerHTML = '<p class="empty">No collector has sent anything yet.</p>'; };
-
   // ---- renderer 1: live telemetry. Three stacked strips sharing one 60 s axis (power, HBM bandwidth,
   // NVLink). Per box: a thick line = mean across its GPUs, faint thin lines = each GPU, in the box's colour.
   // Each box is drawn against its own clock ("seconds ago" from its newest sample), so clock skew
@@ -193,7 +175,6 @@
     const sig = hosts.map(x => [x, data[x].slot, data[x].label, data[x].replay, data[x].stoppable, hidden.has(x), data[x].age_s > 60].join("|")).join(";") || "none";
     if (boxes.dataset.sig !== sig) {   // rebuild rows only when the set of boxes changes (keeps buttons clickable)
       boxes.dataset.sig = sig;
-      const replaying = hosts.some(x => data[x].stoppable);
       // a box silent for over 60 s gives up its slot to a newcomer, so it doesn't block adding one
       boxes.innerHTML = !hosts.length
         ? `<div class="box"><b>No box connected</b><span class="sub"><span class="dot" style="background:${css("--muted")}"></span>receiving no data right now</span></div>${o.connectHref ? noDataBarFor(o.connectHref) : noDataBar}`
@@ -202,17 +183,12 @@
             return `<div class="box${off ? " off" : ""}" data-host="${esc(x)}">
               <button class="tog" data-tog="${esc(x)}" title="${off ? "Show" : "Hide"} this box on the graphs">
                 <i class="sw" style="border-color:${col};background:${off ? "transparent" : col}"></i><b>${esc(x)}</b><span class="lab">${esc(h.label)}</span></button>
-              ${h.replay ? `<span class="pill">${esc(h.replay)}</span>` : ""}<span class="sub st"></span><span class="grow"></span>
-              ${h.stoppable ? `<button class="act" data-act="replay-stop">Stop</button>` : ""}</div>`;
+              <span class="sub st"></span><span class="grow"></span></div>`;
           }).join("");
-      // beside the hint: Connect / Play, always there while boxes are on the page (the empty state has its own).
-      // Play stays visible when all slots are taken, greyed out with the reason; hidden only while a replay runs.
+      // beside the hint: Connect another box, while boxes are on the page and a slot is free (the empty state has its own)
       const room = hosts.filter(x => data[x].age_s <= 60).length < MAX_BOXES;
       const acts = el.querySelector(".acts");   // the compact view has no hint row, so no buttons beside it
-      if (acts) acts.innerHTML = !hosts.length ? "" :
-        (room ? `<a class="act" href="/walkthrough">Connect another box</a>` : "") +
-        (replaying ? "" : `<button class="act" data-act="replay-start"${room ? "" :
-          ` disabled title="All ${MAX_BOXES} slots are taken. A box has to stop (or be silent for 60 s) first."`}>Play a recorded trace</button>`);
+      if (acts) acts.innerHTML = hosts.length && room ? `<a class="act" href="/walkthrough">Connect another box</a>` : "";
     }
     for (const x of hosts) {
       const st = boxes.querySelector(`.box[data-host="${CSS.escape(x)}"] .st`);
@@ -233,185 +209,13 @@
     }
   }
 
-  // ---- renderer 2: ingest health (is the pipe itself OK?)
-  function renderIngest(el, data, opts = {}) {
-    prune(el, data);
-    for (const [host, h] of Object.entries(data)) {
-      const sec = section(el, host, "ingest"), s = h.ingest;
-      const lagNote = s.lag_ms == null ? "" : Math.abs(s.lag_ms) > 2000 ? " (clock skew?)" : "";
-      sec.innerHTML = `<h2>${host} <span class="sub">${statusLine(h)}</span></h2>
-        <div class="stats">
-          <div class="card stat"><div class="v">${s.batches_last_min}</div><div class="k">batches, last min (expect 60)</div></div>
-          <div class="card stat"><div class="v">${s.samples_per_s}</div><div class="k">samples / s (10 × GPUs)</div></div>
-          <div class="card stat"><div class="v">${s.kb_per_s}</div><div class="k">KB / s received</div></div>
-          <div class="card stat"><div class="v">${s.lag_ms ?? "–"} ms</div><div class="k">newest sample age on arrival${lagNote}</div></div>
-          <div class="card stat"><div class="v">${s.gaps_5min}</div><div class="k">gaps > 3 s, last 5 min</div></div>
-          <div class="card stat"><div class="v">${Object.keys(h.gpus).length}</div><div class="k">GPUs reporting</div></div>
-        </div>
-        ${opts.noFields ? "" : `<div class="fields">Fields seen (${s.fields.length}): <span class="mono">${s.fields.join(", ")}</span></div>`}`;
-    }
-    noData(el);
-  }
-
-  // ---- renderer 3: raw view. Field list (one row per field, one column per GPU),
-  // the merged "inbound this instant" record, and the last 30 s of samples in a dropdown.
-  // Every field collector.py sends, how often, and where it reads it (his ask, 2026-11-21: "a comprehensive list").
-  // Kept in step with collector.py (read_power_w, read_slow, GPM_METRICS, NetTx). The hello (once per connection)
-  // is listed in full below the table.
-  const RAW_FIELDS = [  // [key, unit, rate, read from]
-    ["power_w", "W", "10 Hz", "NVML field 186 (instant power); nvmlDeviceGetPowerUsage if the GPU lacks it"],
-    ["energy_mj", "mJ, cumulative", "1 Hz", "nvmlDeviceGetTotalEnergyConsumption"],
-    ["sm_clock_mhz", "MHz", "1 Hz", "nvmlDeviceGetClockInfo(NVML_CLOCK_SM)"],
-    ["throttle_reasons", "bitmask", "1 Hz", "nvmlDeviceGetCurrentClocksEventReasons"],
-    ["gpu_temp_c", "°C", "1 Hz", "nvmlDeviceGetTemperature(GPU)"],
-    ["hbm_temp_c", "°C", "1 Hz", "NVML field 82 (memory temperature)"],
-    ["mem_used_gb", "GB", "1 Hz", "nvmlDeviceGetMemoryInfo"],
-    ["sm_util_pct", "%", "1 Hz", "GPM SM_UTIL"], ["sm_occupancy_pct", "%", "1 Hz", "GPM SM_OCCUPANCY"],
-    ["tensor_util_pct", "%", "1 Hz", "GPM ANY_TENSOR_UTIL"], ["dram_bw_util_pct", "%", "1 Hz", "GPM DRAM_BW_UTIL"],
-    ["pcie_tx_gb_s", "GB/s", "1 Hz", "GPM PCIE_TX_PER_SEC ÷ 1000"], ["pcie_rx_gb_s", "GB/s", "1 Hz", "GPM PCIE_RX_PER_SEC ÷ 1000"],
-    ["nvlink_tx_gb_s", "GB/s", "1 Hz", "GPM NVLINK_TOTAL_TX_PER_SEC ÷ 1000"], ["nvlink_rx_gb_s", "GB/s", "1 Hz", "GPM NVLINK_TOTAL_RX_PER_SEC ÷ 1000"],
-    ["net_tx_gb_s", "GB/s, whole box", "1 Hz", "not NVML: RDMA port counters (/sys/class/infiniband/*/ports/1, port_xmit_data × 4 bytes), on GPU 0's row; collector v0.5+"],
-  ];
-  const rawStyle = document.createElement("style");
-  rawStyle.textContent = `
-    table.fields { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-    table.fields th { text-align: left; font-weight: 600; color: var(--ink2); padding: 5px 10px; border-bottom: 1px solid var(--axis); }
-    table.fields td { padding: 3px 10px; border-bottom: 1px solid var(--grid); transition: background .9s; white-space: nowrap; }
-    table.fields th { white-space: nowrap; }
-    table.fields td.num, table.fields th.num { text-align: right; }
-    table.fields td.chg { background: var(--flash); transition: none; }
-    table.fields .k { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
-    table.fields .m { color: var(--muted); }
-    table.fields td.src { white-space: normal; min-width: 220px; max-width: 320px; font-size: 11.5px; line-height: 1.35; }
-    .rawsec { margin-top: 22px; }
-    details.stream summary, details.instantbox summary, details.ingestbox summary { cursor: pointer; color: var(--ink2); font-size: 13px; margin-bottom: 8px; }
-    .ingestbody .stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-    .ingestbody .stat .v { font-size: 17px; }
-    .scroll { overflow: auto; max-height: 460px; border: 1px solid var(--ring); border-radius: 8px; background: var(--surface); }
-    .scroll table.fields th { position: sticky; top: 0; background: var(--surface); }
-  `;
-  document.head.appendChild(rawStyle);
-  const fmtNum = v => v == null ? "" : typeof v === "number" ? String(Number(v.toFixed(3))) : String(v);
-  // cumulative energy is ~1e11 mJ: show 4 significant figures (e.g. 1.085e11) instead of 12 digits
-  const fmtField = (k, v) => k === "energy_mj" && typeof v === "number" ? v.toPrecision(4).replace("e+", "e") : fmtNum(v);
-  const clock = t => new Date(t * 1000).toTimeString().slice(0, 8) + "." + String(Math.floor((t % 1) * 1000)).padStart(3, "0");
-  const prevVals = {};
-
-  // a hello as readable JSON: one line per top-level key, one line per GPU
-  const fmtHello = o => {
-    const { gpus = [], ...rest } = o || {};
-    if (rest.received_at) rest.received_at = clock(rest.received_at);
-    return "{\n" + Object.entries(rest).map(([k, v]) => `  "${k}": ${JSON.stringify(v)}`).join(",\n") +
-      (gpus.length ? `,\n  "gpus": [\n${gpus.map(g => "    " + JSON.stringify(g)).join(",\n")}\n  ]` : "") + "\n}";
-  };
-
-  // connection log (all boxes): hellos with everything they said, refusals (5th box), evictions
-  async function renderLog(box) {
-    let ev; try { ev = await (await fetch("/api/live/events")).json(); } catch (e) { return; }
-    const sig = ev.length + "|" + (ev[0] ? ev[0].t : "");
-    if (box.dataset.sig === sig) return;   // only redraw on new events, so open rows stay open
-    box.dataset.sig = sig;
-    box.innerHTML = !ev.length ? `<p class="sub">Nothing yet. Every box says hello before its first batch; it shows up here.</p>`
-      : `<div class="scroll" style="max-height:320px"><table class="fields"><thead><tr><th>Time</th><th>Box</th><th>Event</th><th>Detail</th></tr></thead><tbody>` +
-        ev.map(e => `<tr><td class="k">${clock(e.t)}</td><td>${esc(e.host)}</td><td>${esc(e.kind)}</td><td style="white-space:normal">${esc(e.text)}` +
-          (e.info ? `<details><summary class="m">everything it sent</summary><pre class="raw mono" style="white-space:pre-wrap">${esc(fmtHello(e.info))}</pre></details>` : "") +
-          `</td></tr>`).join("") + `</tbody></table></div>`;
-  }
-
-  async function renderRaw(root, data) {
-    if (!root.querySelector(".rawmain")) root.innerHTML = `<div class="rawmain"></div>
-      <div class="rawsec"><details class="logbox" open><summary>Connection log: hellos, refusals, evictions (all boxes, newest first)</summary><div class="rawlog"></div></details></div>`;
-    if (root.querySelector("details.logbox").open) renderLog(root.querySelector(".rawlog"));
-    const el = root.querySelector(".rawmain");
-    const hosts = bySlot(data);
-    if (!hosts.length) {   // nothing sending: same table, empty cells, clearly labelled
-      if (el.dataset.sig !== "__none__") {
-        el.dataset.sig = "__none__";
-        el.innerHTML = `<p class="sub"><span class="dot" style="background:${css("--muted")}"></span>Receiving no data right now</p>
-          ${noDataBar}
-          <div class="card" style="padding:4px 2px"><table class="fields"><thead><tr><th>Field</th><th>Unit</th><th>Rate</th><th>Read from</th>
-            <th class="num">GPU –</th><th class="num">Age</th></tr></thead>
-          <tbody>${RAW_FIELDS.map(([k, u, rate, src]) => `<tr><td class="k">${k}</td><td class="m">${u}</td><td class="m">${rate}</td><td class="m src">${src}</td>
-            <td class="num m">–</td><td class="num m">–</td></tr>`).join("")}</tbody></table></div>`;
-      }
-      return;
-    }
-    if (!hosts.includes(el._pick)) el._pick = hosts[0];
-    const host = el._pick;
-    const open = el.querySelector("details.stream")?.open ? 1 : 0;
-    const r = await (await fetch(`/api/live/raw?host=${encodeURIComponent(host)}&stream=${open}`)).json();
-    if (!r.gpus) return;   // that box just went away; the next poll picks another
-    const gids = Object.keys(r.gpus);
-    const sig = host + "|" + gids.join(",");
-    if (el.dataset.sig !== sig) {   // build the skeleton once per host / GPU set
-      el.dataset.sig = sig;
-      delete el.dataset.hosts;   // the picker lives in the skeleton, so rebuild it too
-      el.innerHTML = `
-        <p class="sub"><span class="pickwrap"></span><span class="meta"></span></p>
-        <div class="card" style="padding:4px 2px">
-          <table class="fields"><thead><tr><th>Field</th><th>Unit</th><th>Rate</th><th>Read from</th>
-            ${gids.map(g => `<th class="num">GPU ${g}</th>`).join("")}<th class="num">Age</th></tr></thead>
-          <tbody>${RAW_FIELDS.map(([k, u, rate, src]) => `<tr data-k="${k}"><td class="k">${k}</td><td class="m">${u.replace(", cumulative", " (cum.)")}</td>
-            <td class="m">${rate}</td><td class="m src">${src}</td>${gids.map(g => `<td class="num" data-g="${g}"></td>`).join("")}
-            <td class="num m age"></td></tr>`).join("")}</tbody></table>
-        </div>
-        <div class="rawsec"><details class="hellobox"><summary class="hellosum"></summary><pre class="raw mono hello" style="white-space:pre-wrap"></pre></details></div>
-        <div class="rawsec"><details class="ingestbox"><summary>Ingest health: is the pipe itself working?</summary><div class="ingestbody"></div></details></div>
-        <div class="rawsec"><details class="instantbox"><summary>Inbound this instant: the newest sample per GPU, with the newest 1 Hz values merged in</summary><pre class="raw mono instant" style="white-space:pre-wrap"></pre></details></div>
-        <div class="rawsec"><details class="stream"><summary>Sample stream, last 30 s</summary>
-          <div class="scroll"><table class="fields"><thead><tr><th>Time</th><th>GPU</th>
-            ${RAW_FIELDS.map(([k]) => `<th class="num k">${k}</th>`).join("")}</tr></thead><tbody></tbody></table></div>
-        </details></div>`;
-    }
-    if (el.dataset.hosts !== hosts.join("|")) {   // box picker, only when more than one box is sending
-      el.dataset.hosts = hosts.join("|");
-      el.querySelector(".pickwrap").innerHTML = hosts.length < 2 ? "" :
-        `<select class="pick">${hosts.map(x => `<option value="${esc(x)}"${x === host ? " selected" : ""}>${esc(x)} · ${esc(data[x].label)}</option>`).join("")}</select> `;
-      el.querySelector(".pick")?.addEventListener("change", e => { el._pick = e.target.value; el.dataset.sig = ""; renderRaw(root, data); });
-    }
-    const hs = el.querySelector(".hellosum"), hello = r.hello;
-    hs.textContent = hello ? `What this box said about itself (hello) · received ${clock(hello.received_at)}${hello.from_ip ? " from " + hello.from_ip : ""}`
-      : "This box hasn't said hello (an older collector.py?)";
-    const ht = hello ? fmtHello(hello) : "";
-    if (el.querySelector(".hello").textContent !== ht) el.querySelector(".hello").textContent = ht;
-    if (el.querySelector("details.ingestbox").open) renderIngest(el.querySelector(".ingestbody"), { [host]: data[host] }, { noFields: true });
-    el.querySelector(".meta").textContent =
-      `${hosts.length < 2 ? host + " · " + data[host].label + " · " : ""}${data[host].replay ? "replayed recording · " : ""}last batch: ${r.batch.n_samples} samples, ${r.batch.bytes} bytes · values flash when they change`;
-    for (const [k] of RAW_FIELDS) {
-      const row = el.querySelector(`tr[data-k="${k}"]`);
-      let oldest = null;
-      for (const g of gids) {
-        const f = r.gpus[g].fields[k], td = row.querySelector(`td[data-g="${g}"]`);
-        const txt = f ? fmtField(k, f.v) : "–";
-        if (f) oldest = oldest == null ? f.t : Math.min(oldest, f.t);
-        const key = `${host}|${g}|${k}`;
-        if (prevVals[key] !== undefined && prevVals[key] !== txt) {
-          td.classList.add("chg");
-          requestAnimationFrame(() => requestAnimationFrame(() => td.classList.remove("chg")));
-        }
-        prevVals[key] = txt; td.textContent = txt;
-      }
-      row.querySelector(".age").textContent = oldest == null ? "–" : (r.newest_t - oldest).toFixed(1) + " s";
-    }
-    // compact: header line, then one line per GPU (wrapped by the browser if long)
-    const head = `"host": ${JSON.stringify(host)}, "received": ${JSON.stringify(r.received_at ? clock(r.received_at) : null)}`;
-    const lines = gids.map(g => `  "gpu ${g}": ${JSON.stringify(r.gpus[g].instant).replace(/,"/g, ', "').replace(/":/g, '": ')}`);
-    el.querySelector(".instant").textContent = `{ ${head},\n${lines.join(",\n")} }`;
-    const det = el.querySelector("details.stream");
-    if (r.stream) {
-      det.querySelector("summary").textContent = `Sample stream, last 30 s (${r.stream.length} samples, newest first)`;
-      det.querySelector("tbody").innerHTML = r.stream.map(s => `<tr><td class="k">${clock(s.t)}</td><td>${s.gpu}</td>` +
-        RAW_FIELDS.map(([k]) => `<td class="num">${fmtField(k, s[k])}</td>`).join("") + "</tr>").join("");
-    }
-  }
-
   // ---- one poller, many listeners
   const listeners = [];
   async function poll() {
     try { const d = await (await fetch("/api/live")).json(); listeners.forEach(f => f(d)); } catch (e) {}
   }
   window.TWCLive = {
-    renderLive, renderIngest, renderRaw,
+    renderLive,
     subscribe(f) { listeners.push(f); if (listeners.length === 1) { poll(); setInterval(poll, 1000); } },
   };
 })();

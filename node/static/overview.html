@@ -59,7 +59,7 @@
 <!-- Text: Atharva's Google Doc "[Shared] A Prototype of Telemetry-based Compute Verification", tab "Draft 4"
      (dated Nov 22, 2026; synced 2026-11-22), placed verbatim (typos included) up to and including the thank-yous;
      the notes after them are left out. Changes from the doc: links to the demo site point inside this site
-     (/debug#...), his email is left off the byline (it stays in his "Reach out" link), the doc's "Ask before sharing"
+     (/replay, /replay#check; the field list links to collector.py on GitHub since the Debug page went, 2026-11-27), his email is left off the byline (it stays in his "Reach out" link), the doc's "Ask before sharing"
      line is left off, and in the second "Consistency Checking" bullet only its label is bold (the doc bolds all of it).
      The footnotes are from the Nov 16 export (the Drive text export doesn't carry footnotes).
      The two diagrams are the same drawings as the doc's, from the sharper Nov 7 PDF export.
@@ -73,7 +73,7 @@
     <p class="aff">Lucid Computing · November 2026</p>
     <div class="actions">
       <a class="btn primary" href="/replay">Open the demo →</a>
-      <a class="btn" href="https://docs.google.com/document/d/1NONM-TS9p_ridgv_7Y26XEFWGajACbxMZB92wkRTm8Y/edit?tab=t.xi0fbmx2d8of" target="_blank" rel="noopener">Leave feedback ↗</a>
+      <a class="btn" href="mailto:atharva@lucidcomputing.ai">Get in touch</a>   <!-- was "Leave feedback ↗" to the Google Doc; his rename 2026-11-27 -->
     </div>
   </header>
 
@@ -121,10 +121,10 @@
 
   <h2>Prototype Details</h2>
   <p>This demo implements the above architecture. The Verification Node / Collector is running in this <a href="https://fly.io">fly.io</a> container, that accepts streamed telemetry input from collector.py. For this demonstration, I’m replaying locally stored telemetry data that was generated from pre-training and inference workload variants. I also implement a classifier that consumes telemetry from a rolling 60s window to check compliance with three rules.</p>
-  <p>Collector.py samples telemetry at 1-10 hz, and sends this batched to the verification node. This telemetry is polled from NVML, and includes per-GPU power draw, memory bandwidth, and networking data, <a href="/debug#raw">amongst other fields</a>.</p>
+  <p>Collector.py samples telemetry at 1-10 hz, and sends this batched to the verification node. This telemetry is polled from NVML, and includes per-GPU power draw, memory bandwidth, and networking data, <a href="https://github.com/atharvanihalani/twc-verification-node/blob/main/collector.py" target="_blank" rel="noopener">amongst other fields</a>.</p>
   <figure><img src="/static/overview/fig-demo.png" alt="GPUs send reported telemetry to the verification node; the central scheduler sends declared Slurm workloads to the same node."></figure>
-  <p>There are two types of data the Collector receives- telemetry and declared workloads. Telemetry is reported at the node-level- ie. the collector can receive telemetry from multiple nodes simultaneously, as it would in a real deployment. This is overlaid on a graph [<a href="/debug#live">link</a>].</p>
-  <p>The declared workload is reported by the scheduler running at the cluster-level. A second script runs on the head node to report the Slurm logs [<a href="/debug#slurm">link</a>]. The Verifier Node then uses the telemetry to confirm whether what’s running matches what was declared.</p>
+  <p>There are two types of data the Collector receives- telemetry and declared workloads. Telemetry is reported at the node-level- ie. the collector can receive telemetry from multiple nodes simultaneously, as it would in a real deployment. This is overlaid on a graph [<a href="/replay">link</a>].</p>
+  <p>The declared workload is reported by the scheduler running at the cluster-level. A second script runs on the head node to report the Slurm logs [<a href="/replay#check">link</a>]. The Verifier Node then uses the telemetry to confirm whether what’s running matches what was declared.</p>
 
   <h3>What workloads am I running?</h3>
   <p>I’m running pre-training and inference workloads on one 8x Nvidia GPU node. This is for simplicity’s sake- in practice, workloads would also include post-training, evaluations, experimentation, etc. I’m using an 8x HGX GPU node because HGX is the form factor used for datacenter servers (as opposed to PCIe / NVL nodes). Also, production workloads are run on multiple nodes, but it’s hard to find multi-node availability through cloud providers, so I run workloads on single nodes.</p>
