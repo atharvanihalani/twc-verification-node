@@ -1,0 +1,57 @@
+<svg class="tf" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 380" role="img" aria-label="Inside the prover, GPU nodes run under a central Slurm scheduler. A collector on each node sends reported telemetry to the verification node; the scheduler sends its declared Slurm workloads to the same node.">
+<style>
+  svg.tf text { font-family: var(--font-mono, "Geist Mono", ui-monospace, Menlo, monospace); font-size: 11px; letter-spacing: .07em; fill: var(--ink, #07080c); }
+  svg.tf text.tf-m { fill: var(--muted, #686e88); font-size: 10px; }
+  svg.tf text.tf-on { fill: var(--on-acc, #ffffff); }
+  svg.tf .tf-ln { fill: none; stroke: var(--ink, #07080c); stroke-width: 1; }
+  svg.tf .tf-bd { fill: none; stroke: var(--ink, #07080c); stroke-width: 1; stroke-dasharray: 3 4; opacity: .55; }
+  svg.tf .tf-da { fill: none; stroke: var(--acc, #7b2d7b); stroke-width: 1.3; stroke-dasharray: 5 4; }
+  svg.tf .tf-acc { fill: var(--acc, #7b2d7b); }
+  svg.tf .tf-ack { fill: none; stroke: var(--acc, #7b2d7b); stroke-width: 1.3; }
+  svg.tf .tf-pan { fill: var(--surface, #ffffff); stroke: var(--ring, #07080c22); }
+  svg.tf .tf-tile, svg.tf .tf-ah { fill: var(--ink, #07080c); }
+  svg.tf .tf-host { fill: var(--surface, #ffffff); stroke: var(--ink, #07080c); stroke-width: 1; }
+  svg.tf .tf-rl { fill: none; stroke: var(--ring, #07080c22); stroke-width: 1; }
+  svg.tf text.tf-cl { fill: var(--muted, #686e88); font-size: 10px; letter-spacing: .05em; }
+</style>
+  <rect class="tf-bd" x="40" y="20" width="680" height="340" rx="14"/>
+  <text x="60" y="48">Prover · Neocloud / Lab</text>
+  <rect class="tf-acc" x="305" y="80" width="150" height="46" rx="4"/>
+  <text class="tf-on" x="380" y="107" text-anchor="middle">Verification node</text>
+  <rect class="tf-pan" x="120" y="226" width="520" height="110" rx="10"/>
+  <text x="136" y="326">Central scheduler · Slurm</text>
+  <rect class="tf-host" x="192" y="250" width="76" height="58" rx="6"/><path class="tf-rl" d="M192 268H268"/><text class="tf-cl" x="230" y="263" text-anchor="middle">collector</text>
+  <rect class="tf-tile" x="200" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="216" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="232" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="248" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="200" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="216" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="232" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="248" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-host" x="342" y="250" width="76" height="58" rx="6"/><path class="tf-rl" d="M342 268H418"/><text class="tf-cl" x="380" y="263" text-anchor="middle">collector</text>
+  <rect class="tf-tile" x="350" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="366" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="382" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="398" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="350" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="366" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="382" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="398" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-host" x="492" y="250" width="76" height="58" rx="6"/><path class="tf-rl" d="M492 268H568"/><text class="tf-cl" x="530" y="263" text-anchor="middle">collector</text>
+  <rect class="tf-tile" x="500" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="516" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="532" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="548" y="274" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="500" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="516" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="532" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="548" y="290" width="12" height="12" rx="1.5"/>
+  <path class="tf-ln" d="M230 250V190M380 250V190M530 250V190M230 190H530M380 190V132"/>
+  <path class="tf-ah" d="M380 127l-4 8h8z"/>
+  <text x="392" y="166">① Reported telemetry</text>
+  <path class="tf-da" d="M640 281H684V103H461"/>
+  <path class="tf-acc" d="M456 103l8-4v8z"/>
+  <text x="476" y="94">② Declared Slurm workloads</text>
+  <text class="tf-m" x="624" y="326" text-anchor="end">GPUS</text>
+</svg>

@@ -45,6 +45,12 @@ The thresholds separated every recorded workload, with wide margins. None of the
 - **The live collector doesn't send network counters yet,** so rule 3 only judges recordings.
 - **Node state lives in memory** on a single machine.
 
+## Design versions
+
+The same pages are served in three looks, picked by the URL: `/` and `/v1/…` use the "Record" theme, `/v2/…` the Lucid-branded theme, and `/old/…` the design before them. `node/app.py` (`DesignPrefix`) strips the prefix for routing, `node/static/nav.js` keeps links inside it, and `node/static/theme/variant.js` loads the theme.
+
+**The theme files in `node/static/theme/` are gitignored, so they are not in this repository.** They are built on Lucid's design kit, which is private. They reach the live site because `fly deploy` builds from the local folder, and `.dockerignore` includes everything under `node/`. In a fresh clone the folder is missing, so every version shows the older design.
+
 ## Repository layout
 
 | Path | What |
@@ -52,6 +58,7 @@ The thresholds separated every recorded workload, with wide margins. None of the
 | `node/app.py` | The verification node (FastAPI): ingest, rule loop, APIs, pages |
 | `node/rules/` | One file per rule, plus the spec and its test |
 | `node/pages/`, `node/static/` | The Overview, Replay, Walkthrough and Debug pages; replay data |
+| `node/static/theme/` | The site themes (gitignored, see Design versions) |
 | `collector.py` | Telemetry collector for GPU boxes (dependency: `nvidia-ml-py`) |
 | `slurm_reporter.py` | Sends the Slurm job table to the node |
 | `setup.py` | Sets up a rented GPU box: collector, vLLM, TorchTitan |

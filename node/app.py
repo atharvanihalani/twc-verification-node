@@ -1221,4 +1221,30 @@ if (HERE.parent / "mock-ups").is_dir():
     app.mount("/mock", NoCacheStatic(directory=HERE.parent / "mock-ups"), name="mock")
 
 
-app = Auth(app)  # noqa: F811  (wrap last so it covers HTTP + websockets)
+class DesignPrefix:
+    """Design versions under a URL prefix (2026-11-27): /v1/... and the bare paths = the "Record" theme, /v2/... = the
+    Lucid-branded theme, /old/... = the design before the kit. The pages are the same files; static/theme/variant.js
+    reads the prefix and loads the theme (its files are gitignored: the design kit is private), and nav.js keeps
+    links inside the prefix. Here the prefix is only stripped for routing; /v2 alone opens the Overview."""
+    PREFIXES = ("/v1", "/v2", "/old")
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            for p in self.PREFIXES:
+                if path == p or path.startswith(p + "/"):
+                    rest = path[len(p):]
+                    if rest in ("", "/"):
+                        rest = "/overview"
+                    elif rest == "/live":
+                        rest = "/debug"   # /live redirects to /debug, which would drop the prefix
+                    if rest.startswith(("/overview", "/replay", "/walkthrough", "/debug", "/live")):
+                        scope = dict(scope, path=rest, raw_path=rest.encode())
+                    break
+        return await self.inner(scope, receive, send)
+
+
+app = Auth(DesignPrefix(app))  # noqa: F811  (wrap last so it covers HTTP + websockets; Auth outside, so a login keeps the prefix)

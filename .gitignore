@@ -20,3 +20,7 @@ torchtitan-pcie-h200.csv
 
 # Recordings of connected boxes made through the Replay page (TWC_DATA_DIR)
 .data/
+
+# Lucid design-kit files and the site themes built on them (the kit is private; this repo is public).
+# They ship to Fly through .dockerignore (node/ is included) but never go to GitHub. Without them the pages fall back to the old look.
+node/static/theme/

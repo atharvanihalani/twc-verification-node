@@ -1,0 +1,67 @@
+<svg class="tf" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 380" role="img" aria-label="Inside the prover (neocloud or lab, assumed adversarial), a collector on each GPU node sends evidence, signed telemetry, to a verification node that also sits inside the prover. The node sends reported information out to the verifier (METR, Averi, etc.).">
+<style>
+  svg.tf text { font-family: var(--font-mono, "Geist Mono", ui-monospace, Menlo, monospace); font-size: 11px; letter-spacing: .07em; fill: var(--ink, #07080c); }
+  svg.tf text.tf-m { fill: var(--muted, #686e88); font-size: 10px; }
+  svg.tf text.tf-on { fill: var(--on-acc, #ffffff); }
+  svg.tf .tf-ln { fill: none; stroke: var(--ink, #07080c); stroke-width: 1; }
+  svg.tf .tf-bd { fill: none; stroke: var(--ink, #07080c); stroke-width: 1; stroke-dasharray: 3 4; opacity: .55; }
+  svg.tf .tf-da { fill: none; stroke: var(--acc, #7b2d7b); stroke-width: 1.3; stroke-dasharray: 5 4; }
+  svg.tf .tf-acc { fill: var(--acc, #7b2d7b); }
+  svg.tf .tf-ack { fill: none; stroke: var(--acc, #7b2d7b); stroke-width: 1.3; }
+  svg.tf .tf-pan { fill: var(--surface, #ffffff); stroke: var(--ring, #07080c22); }
+  svg.tf .tf-tile, svg.tf .tf-ah { fill: var(--ink, #07080c); }
+  svg.tf .tf-host { fill: var(--surface, #ffffff); stroke: var(--ink, #07080c); stroke-width: 1; }
+  svg.tf .tf-rl { fill: none; stroke: var(--ring, #07080c22); stroke-width: 1; }
+  svg.tf text.tf-cl { fill: var(--muted, #686e88); font-size: 10px; letter-spacing: .05em; }
+</style>
+  <rect class="tf-bd" x="270" y="60" width="470" height="300" rx="14"/>
+  <text x="290" y="88">Prover · Neocloud / Lab</text><text class="tf-m" x="290" y="104">ASSUMED ADVERSARIAL</text>
+  <rect class="tf-host" x="302" y="266" width="76" height="58" rx="6"/><path class="tf-rl" d="M302 284H378"/><text class="tf-cl" x="340" y="279" text-anchor="middle">collector</text>
+  <rect class="tf-tile" x="310" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="326" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="342" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="358" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="310" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="326" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="342" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="358" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-host" x="408" y="266" width="76" height="58" rx="6"/><path class="tf-rl" d="M408 284H484"/><text class="tf-cl" x="446" y="279" text-anchor="middle">collector</text>
+  <rect class="tf-tile" x="416" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="432" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="448" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="464" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="416" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="432" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="448" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="464" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-host" x="516" y="266" width="76" height="58" rx="6"/><path class="tf-rl" d="M516 284H592"/><text class="tf-cl" x="554" y="279" text-anchor="middle">collector</text>
+  <rect class="tf-tile" x="524" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="540" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="556" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="572" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="524" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="540" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="556" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="572" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-host" x="622" y="266" width="76" height="58" rx="6"/><path class="tf-rl" d="M622 284H698"/><text class="tf-cl" x="660" y="279" text-anchor="middle">collector</text>
+  <rect class="tf-tile" x="630" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="646" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="662" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="678" y="290" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="630" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="646" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="662" y="306" width="12" height="12" rx="1.5"/>
+  <rect class="tf-tile" x="678" y="306" width="12" height="12" rx="1.5"/>
+  <text class="tf-m" x="302" y="346">GPUS, EACH WITH A COLLECTOR</text>
+  <path class="tf-ln" d="M340 266V250M446 266V250M554 266V250M660 266V250M340 250H660M500 250V202"/>
+  <path class="tf-ah" d="M500 197l-4 8h8z"/>
+  <text x="512" y="232">① Evidence · signed telemetry</text>
+  <rect class="tf-acc" x="425" y="150" width="150" height="46" rx="4"/>
+  <text class="tf-on" x="500" y="177" text-anchor="middle">Verification node</text>
+  <path class="tf-da" d="M500 150V28H140V166"/>
+  <path class="tf-acc" d="M140 171l-4-8h8z"/>
+  <text x="160" y="20">② Reported information</text>
+  <rect class="tf-ack" x="40" y="172" width="200" height="74" rx="10"/>
+  <text x="56" y="204">Verifier</text>
+  <text class="tf-m" x="56" y="226">METR / AVERI / ETC</text>
+</svg>

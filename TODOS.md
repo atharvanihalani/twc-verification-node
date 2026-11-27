@@ -6,7 +6,7 @@ Tidied 2026-11-16: open items are on top, each cut to what is still open. Finish
 
 ## Before releasing (priority, his asks 2026-11-22)
 - [ ] **Copy-edit the whole website.** Claude's text snippets run wordy (hover titles, notes, Should/Did lines, Walkthrough comments, README); prune them all in one pass before release.
-- [ ] **Change the site's domain, and settle the password.** The password was removed on 2026-11-22 (Fly v51, `fly secrets unset SITE_PASSWORD`) so Claude could run the Walkthrough; the pages and setup.py go password-free when there is none, and setting the secret again brings it back. With it off, anyone can send telemetry, start the replay feed and delete recordings.
+- [ ] **Change the site's domain.** (Password: removed 2026-11-22, Fly v51, so Claude could run the Walkthrough; set again 2026-11-27 from `.env`, his call. `fly secrets unset SITE_PASSWORD` turns it off; with it off, anyone can send telemetry, start the replay feed and delete recordings.)
 
 ## Next up (Atharva's list, 2026-11-08)
 1. ~~Actually run setup on a real box and see if it works.~~ Done 2026-11-10 (Verda and vast 8× H200, vast 8× B200). What's left is under "Walkthrough and `setup.py`".

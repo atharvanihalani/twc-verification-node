@@ -25,8 +25,18 @@
   document.head.appendChild(style);
   const nav = document.createElement("nav");
   nav.className = "topnav";
-  const here = location.pathname;
+  // Design versions live under a URL prefix (/v1, /v2, /old; none = the default), served by the same pages
+  // (app.py strips it; static/theme/variant.js picks the look). Links between pages keep the prefix.
+  const PREFIX = (location.pathname.match(/^\/(v1|v2|old)(?=\/|$)/) || [""])[0];
+  const here = location.pathname.slice(PREFIX.length) || "/";
   nav.innerHTML = `<span class="brand">TWC verification node</span>` + SECTIONS.map(s =>
-    `<a href="${s.href}" class="${s.match(here) ? "on" : ""}">${s.label}</a>`).join("");
+    `<a href="${PREFIX + s.href}" class="${s.match(here) ? "on" : ""}">${s.label}</a>`).join("");
   document.body.prepend(nav);
+  if (PREFIX) {
+    const PAGES = /^\/(overview|replay|walkthrough|debug|live)?(?=$|[#?])/;
+    const fix = a => { const h = a && a.getAttribute("href"); if (h && h[0] === "/" && h[1] !== "/" && PAGES.test(h)) a.setAttribute("href", PREFIX + h); };
+    // links in the page as written, and any the page draws later, when they are followed
+    document.addEventListener("DOMContentLoaded", () => document.querySelectorAll("a[href^='/']").forEach(fix));
+    document.addEventListener("click", e => fix(e.target.closest && e.target.closest("a[href^='/']")), true);
+  }
 })();
